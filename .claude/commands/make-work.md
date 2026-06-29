@@ -11,12 +11,18 @@ Read the following files to understand the project:
 5. **docs/specs/product-requirements/README.md** (if exists)
 6. **docs/specs/use-cases/README.md** (if exists)
 
-First, check the current state of work:
+First, check the current state of work. Treat the issue tracker and the roadmap as claims to verify, not as ground truth — a later task that builds on "done" work fails if that work was never actually merged.
 
-1. Run `gh issue list --repo <owner>/<repo>` to see open issues
+1. Run `gh issue list --repo <owner>/<repo> --state all` to see open and closed issues
 2. Check what's in progress, what's completed, what's pending
 3. **Check docs/road-map.yaml** for release schedule and use case status
-4. **Run `mage analyze`** to identify specification issues:
+4. **Verify claimed-complete work against the repository.** A closed issue or a "done" roadmap entry is a claim that code was merged, not proof of it. For each release or issue marked done that later work would depend on:
+   - Confirm a merged pull request closed it. An issue closed as completed with no merged PR is not done (`gh issue view <n> --json stateReason` and check its linked PRs).
+   - Confirm the implementation exists in the source tree, not just the spec. Grep for the types, functions, or files the issue said it would produce, and check `git log` for the commit that added them.
+   - Watch for stubs: a function that returns an empty or placeholder result with a "implemented in a later release" comment is not an implementation.
+   - If the project exposes a code-readiness check (for example `mage status`), run it and trust it over issue labels.
+   Anything that fails these checks is unbuilt regardless of tracker state; plan an implementation task for it before any task that depends on it.
+5. **Run `mage analyze`** to identify specification issues:
    - Orphaned PRDs (not referenced by use cases)
    - Missing test suites (use cases without test suites)
    - Broken references (invalid touchpoints, missing files)
