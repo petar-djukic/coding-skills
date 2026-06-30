@@ -234,7 +234,7 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
 3. For the single-issue path — add a comment to the parent issue summarizing what was done:
    ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "<summary of work: what changed, files touched, tokens used>"
+   gh issue comment <number> --repo <owner>/<repo> --body "<summary of work: what changed, files touched, tokens used. Actual LOC: production/test lines from `mage stats:loc` deltas, stated against the issue's Estimated LOC so estimation accuracy is on record>"
    ```
 
 4. Push the final state of the feature branch:
@@ -259,7 +259,7 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
    ## Stats
 
-   <output of mage stats:loc with deltas from start of work>
+   <output of mage stats:loc with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced>
 
    ## Test plan
 

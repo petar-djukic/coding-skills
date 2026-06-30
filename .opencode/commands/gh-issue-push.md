@@ -21,6 +21,7 @@ $ARGUMENTS
    - **Bug**: problem, expected vs actual behavior, reproduction steps if provided.
    - **Enhancement**: description and acceptance criteria.
    - **Both**: include a "Files to Create/Modify" section listing every file. Under each file, list the specific fields or lines to change. If a value appears in multiple places in the same file, list each occurrence.
+   - **Code issues**: include an `Estimated LOC:` line — the model's prediction of production lines of code (and test lines if separable). This is the estimate of record; the actual count is captured at completion by `/gh-issue-pop`, so estimation accuracy can be tracked over time.
 5. Create the issue:
    ```
    gh issue create --repo <owner>/<repo> --title "<title>" --body "<body>" --label "<bug|enhancement>"
