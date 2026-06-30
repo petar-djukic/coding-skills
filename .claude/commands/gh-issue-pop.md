@@ -34,7 +34,7 @@ If arguments contain an issue number (e.g. `42` or `#42`), use that issue. If ar
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues --jq '[.[] | {number: .number, title: .title, state: .state}]'
    ```
 4. Run `mage analyze` to identify spec issues.
-5. Run `mage stats` for current LOC and documentation metrics.
+5. Run `mage stats:loc` for current LOC and documentation metrics.
 6. Summarize the current project state.
 
 ## Phase 3 -- Propose Sub-Issues
@@ -257,7 +257,7 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
    ## Stats
 
-   <output of mage stats with deltas from start of work>
+   <output of mage stats:loc with deltas from start of work>
 
    ## Test plan
 
