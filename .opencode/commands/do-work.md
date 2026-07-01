@@ -98,7 +98,10 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
    Stats:
      Lines of code (Go, production): <prod_loc> (+<delta>)
      Lines of code (Go, tests):      <test_loc> (+<delta>)
-     Words (documentation):          <doc_words> (+<delta>)"
+     Words (documentation):          <doc_words> (+<delta>)
+
+   Skill: do-work
+   Called-by: gh-issue-pop"
    git push
    ```
 
@@ -173,7 +176,10 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
    Stats:
      Lines of code (Go, production): <prod_loc> (+<delta>)
      Lines of code (Go, tests):      <test_loc> (+<delta>)
-     Words (documentation):          <doc_words> (+<delta>)"
+     Words (documentation):          <doc_words> (+<delta>)
+
+   Skill: do-work
+   Called-by: gh-issue-pop"
    git push
    ```
 
