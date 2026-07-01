@@ -4,9 +4,27 @@
 
 Pick **one** of the two workflows below depending on the deliverable type. Use **Documentation workflow** for docs under `docs/`, **Code workflow** for implementation under `pkg/`, `internal/`, `cmd/`.
 
+## Precondition — run inside a worktree
+
+`do-work` runs inside the git worktree that `/gh-issue-pop` created; it never creates the branch itself. Before anything else, confirm you are on a feature branch, not `main`:
+
+```bash
+branch=$(git branch --show-current)
+case "$branch" in
+  gh-*) : ;;   # ok: a pop-created worktree branch
+  *) echo "Not on a worktree branch (current: '$branch'). Call /gh-issue-pop <issue> first, then run /do-work inside the worktree."; exit 1 ;;
+esac
+```
+
+If this check fails, stop — report "call /gh-issue-pop first" and do not implement anything on `main`.
+
 ## Task Priority
 
 When selecting from available sub-issues, **prefer documentation sub-issues over code sub-issues**. Documentation establishes the design before implementation begins.
+
+## When a Sub-Issue Is Too Big
+
+If a sub-issue turns out larger than one `do-work` pass (more than ~700 LOC or ~5 files, or spanning multiple subsystem boundaries), do not implement it and do not run `/gh-issue-pop` — nested worktrees are not supported. Split it into smaller **sibling** sub-issues under the same epic with `/gh-issue-push`, attach them to the epic, and close the oversized sub-issue as decomposed (a comment linking the new ones). Keep working the new sub-issues in the current worktree. One worktree, one PR per epic; decomposition stays flat.
 
 ## How to Choose
 

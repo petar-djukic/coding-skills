@@ -139,6 +139,12 @@ git branch --show-current  # should show gh-<number>-<slug>
 
 The main repo stays on `main` throughout.
 
+### Epics and further breakdown
+
+After `gh-issue-pop`, run `/do-work` — repeatedly for a multi-sub-issue epic (one sub-issue per pass) until every sub-issue is closed, then Phase 5 opens the PR. Decomposition is one level deep and one worktree per epic.
+
+If, while running `/do-work`, a sub-issue turns out too big to finish in one pass, do not pop again — nested worktrees are not supported. Split that sub-issue into smaller **sibling** sub-issues under the same epic with `/gh-issue-push`, work them in the same worktree, and let the epic's single PR close them all. `gh-issue-pop` is only ever run from `main`, never from inside a worktree.
+
 ## Phase 4b -- Generator Mode (Alternative)
 
 Use this phase instead of Phase 4 when the user explicitly requests autonomous execution
