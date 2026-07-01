@@ -24,7 +24,7 @@ When selecting from available sub-issues, **prefer documentation sub-issues over
 
 ## When a Sub-Issue Is Too Big
 
-If a sub-issue turns out larger than one `do-work` pass (more than ~700 LOC or ~5 files, or spanning multiple subsystem boundaries), do not implement it and do not run `/gh-issue-pop` — nested worktrees are not supported. Split it into smaller **sibling** sub-issues under the same epic with `/gh-issue-push`, attach them to the epic, and close the oversized sub-issue as decomposed (a comment linking the new ones). Keep working the new sub-issues in the current worktree. One worktree, one PR per epic; decomposition stays flat.
+If a sub-issue is bigger than you can complete reliably as a single issue in one `do-work` pass — your own judgment, not a fixed line or file count — do not implement it and do not run `/gh-issue-pop` (nested worktrees are not supported). Split it into smaller **sibling** sub-issues under the same epic with `/gh-issue-push`, each sized to what you can finish reliably on its own, attach them to the epic, and close the oversized sub-issue as decomposed (a comment linking the new ones). Keep working the new sub-issues in the current worktree. One worktree, one PR per epic; decomposition stays flat.
 
 ## How to Choose
 
