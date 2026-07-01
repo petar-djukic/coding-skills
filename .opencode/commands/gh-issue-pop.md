@@ -96,7 +96,10 @@ After user approval:
    cd ../gh-<number>-<slug>
    git commit --allow-empty -m "Pop GH-<number>: <title> into worktree
 
-   Sub-issues: <comma-separated list of #N>"
+   Sub-issues: <comma-separated list of #N>
+
+   Skill: gh-issue-pop
+   Called-by: <invoking skill, or 'user' if run directly>"
    ```
 
 4. Push the branch:
@@ -116,7 +119,10 @@ After user approval:
 2. Commit an initial marker in the worktree:
    ```bash
    cd ../gh-<number>-<slug>
-   git commit --allow-empty -m "Pop GH-<number>: <title> into worktree"
+   git commit --allow-empty -m "Pop GH-<number>: <title> into worktree
+
+   Skill: gh-issue-pop
+   Called-by: <invoking skill, or 'user' if run directly>"
    ```
 
 3. Push the branch:
@@ -324,3 +330,23 @@ A GitHub issue is recurring if its title starts with "Recurring:" or its body co
    ```
 
 4. Report the new issue URL so the user knows the recurring issue is ready for the next run.
+
+## Skill Tracing
+
+Each skill records provenance as git trailers on the commits it authors, so `git log` reconstructs which skills ran and which called which — no separate log file.
+
+- `gh-issue-pop` marker commits carry `Skill: gh-issue-pop` and `Called-by: <invoking skill, or 'user'>`.
+- `do-work` implementation commits carry `Skill: do-work` and `Called-by: gh-issue-pop`.
+
+View the roster and the call graph:
+
+```bash
+# per-commit: which skill produced it
+git log --pretty='%h %s [%(trailers:key=Skill,valueonly,separator=%x20)]'
+
+# call graph: caller -> skill, with counts
+git log --format='%(trailers:key=Called-by,valueonly,separator=%x20) -> %(trailers:key=Skill,valueonly,separator=%x20)' \
+  | grep -vE '^ *-> *$' | sort | uniq -c | sort -rn
+```
+
+Limitation: `make-work` and `gh-issue-push` make no commits, so they do not appear in commit-trailer traces. Capturing them needs a provenance line on the issues they create (follow-up).
