@@ -240,7 +240,7 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
      --jq '[.[] | {number: .number, title: .title, state: .state}]'
    ```
-   If any sub-issue lacks a completion comment, do not proceed — report which sub-issues still need work.
+   If any sub-issue lacks a completion comment, or its comment has no `Actual LOC:` line (compared against that issue's `Estimated LOC`), do not proceed — a sub-issue is not done until both the completion comment and the Actual LOC are recorded. Report which sub-issues still need work.
 
 3. For the single-issue path — add a comment to the parent issue summarizing what was done:
    ```bash

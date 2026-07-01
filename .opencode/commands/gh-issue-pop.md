@@ -242,7 +242,7 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
      --jq '[.[] | select(.state=="open")] | length'
    ```
-   If the count is not 0, do not proceed — report which sub-issues are still open.
+   If the count is not 0, do not proceed — report which sub-issues are still open. Also verify each closed sub-issue's completion comment has an `Actual LOC:` line (compared against its `Estimated LOC`); a sub-issue closed without an Actual LOC record is not done — add it before proceeding.
 
 3. For the single-issue path — add a comment to the parent issue summarizing what was done:
    ```bash
