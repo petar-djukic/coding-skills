@@ -100,10 +100,10 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
 1. **Check completeness** against Acceptance Criteria and the format rule checklist
 2. **Run `mage analyze`** to validate documentation consistency. Fix any issues before proceeding.
 3. **Calculate metrics**: tokens used; run `mage stats:loc` for LOC and doc word counts
-4. **Log metrics and close**:
+4. **Log metrics and close** — the `Actual LOC` line is required; the sub-issue is not done without it:
 
    ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "tokens: <count>"
+   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats:loc deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
    gh issue close <number> --repo <owner>/<repo>
    ```
 
@@ -171,15 +171,16 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
 2. Verify the Acceptance Criteria are met (tests, behaviour, observability if specified)
 3. Write tests if the sub-issue or PRD specifies them
 4. Where appropriate, add a short comment listing implemented PRDs
+5. Do not write comments that rot: no `release 00.X`, `stub`, `placeholder`, `for now`, `not yet`, or `will be` tags unless they mark genuinely deferred, unbuilt work. When you touch a file, update or delete any existing comment that references a now-completed release, a removed symbol, or a deferral that is no longer true. Before committing, sweep the files you changed — `grep -nE "release 0|stub|placeholder|removed now|not yet|will be|for now" <changed files>` — and resolve every stale hit.
 
 ## 4. After implementation
 
 1. **Run any tests** to verify your work
 2. **Calculate metrics**: tokens used; run `mage stats:loc` for LOC deltas
-3. **Log metrics and close**:
+3. **Log metrics and close** — the `Actual LOC` line is required; the sub-issue is not done without it:
 
    ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "tokens: <count>"
+   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats:loc deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
    gh issue close <number> --repo <owner>/<repo>
    ```
 
