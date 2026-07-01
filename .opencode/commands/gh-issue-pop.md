@@ -242,12 +242,16 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
      --jq '[.[] | select(.state=="open")] | length'
    ```
-   If the count is not 0, do not proceed — report which sub-issues are still open. Also verify each closed sub-issue's completion comment has an `Actual LOC:` line (compared against its `Estimated LOC`); a sub-issue closed without an Actual LOC record is not done — add it before proceeding.
+   If the count is not 0, do not proceed — report which sub-issues are still open.
+
+   **Actual LOC gate (multi-sub-issue).** For each closed sub-issue whose `deliverable_type` is `code`, verify its completion comment contains an `Actual LOC:` line (per eng01-loc-estimation-lifecycle). A sub-issue closed without an `Actual LOC:` record is not done. If any code sub-issue is missing its `Actual LOC:` line, refuse to proceed past this step: report the offending sub-issue numbers and stop. Do not open the PR, do not add the completion comment, and do not merge. The gate is structural, not advisory — estimation accuracy cannot be audited without both values. Documentation sub-issues (`deliverable_type: documentation`) do not carry LOC and are exempt.
 
 3. For the single-issue path — add a comment to the parent issue summarizing what was done:
    ```bash
    gh issue comment <number> --repo <owner>/<repo> --body "<summary of work: what changed, files touched, tokens used. Actual LOC: production/test lines from `mage stats:loc` deltas, stated against the issue's Estimated LOC so estimation accuracy is on record>"
    ```
+
+   **Actual LOC gate (single-issue).** Before posting the completion comment, check the parent issue's `deliverable_type`. If it is `code`, the comment must contain an `Actual LOC:` line with production and test counts from `mage stats:loc` deltas, stated against the issue's `Estimated LOC`. If the `Actual LOC:` line is absent, refuse to proceed past this step: do not push, do not open the PR, and do not merge. Report that the Actual LOC record is missing and stop. Documentation issues do not carry LOC and are exempt.
 
 4. Push the final state of the feature branch:
    ```bash
@@ -271,7 +275,7 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
    ## Stats
 
-   <output of mage stats:loc with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced>
+   <output of mage stats:loc with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced. For code issues, the Actual LOC line is mandatory — the Phase 5 Actual LOC gate (step 2 or 3 above) refused to proceed without it>
 
    ## Test plan
 
