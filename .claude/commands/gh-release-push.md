@@ -1,8 +1,8 @@
-Run the full release workflow: analyze, test, tag, and push.
+Run the full release workflow: audit, test, tag, and push.
 
 ## Steps
 
-1. Run `mage analyze`. If it fails, fix the problems and re-run (up to 3 attempts). Stop if still failing after 3 attempts.
+1. Run `mage audit`. If it fails, fix the problems and re-run (up to 3 attempts). Stop if still failing after 3 attempts.
 2. Run `mage test:unit`. If it fails, fix the problems and re-run (up to 3 attempts). Stop if still failing after 3 attempts.
 3. Record the current latest tag as the previous release: `git describe --tags --abbrev=0` (or empty if no tags exist yet).
 4. Run `mage tag` to create a `v0.YYYYMMDD.N` tag. Capture the new tag name from the output or via `git describe --tags --abbrev=0`.
