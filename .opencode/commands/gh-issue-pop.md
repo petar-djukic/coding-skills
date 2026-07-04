@@ -35,9 +35,14 @@ If arguments contain an issue number (e.g. `42` or `#42`), use that issue. If ar
    ```bash
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues --jq '[.[] | {number: .number, title: .title, state: .state}]'
    ```
-4. Run `mage audit` to identify spec issues.
-5. Run `mage stats` for current LOC and documentation metrics.
-6. Summarize the current project state.
+4. Probe available mage targets (the result gates all subsequent mage steps):
+   ```bash
+   mage -l 2>/dev/null || true
+   ```
+   Record which targets exist. If `mage` is not installed or the repo has no Magefile, treat all mage targets as absent and skip mage-dependent steps silently.
+5. If `audit` appeared in the probe, run `mage audit` to identify spec issues. Otherwise skip.
+6. If `stats` appeared in the probe, run `mage stats` for current LOC and documentation metrics. Otherwise skip.
+7. Summarize the current project state.
 
 ## Phase 3 -- Propose Sub-Issues
 
@@ -149,8 +154,11 @@ If, while running `/do-work`, a sub-issue turns out too big to finish in one pas
 
 ## Phase 4b -- Generator Mode (Alternative)
 
+**Capability gate:** This phase requires the cobbler orchestrator. If the Phase 2 mage probe did not show `generator:start` in the target list, skip this entire section and do not mention generator mode to the user.
+
 Use this phase instead of Phase 4 when the user explicitly requests autonomous execution
-(e.g. "use generator mode", "run this automatically", or passes `--generator`).
+(e.g. "use generator mode", "run this automatically", or passes `--generator`)
+and the repo has the cobbler orchestrator installed (`generator:start` exists in `mage -l`).
 
 The generator mode drives `mage generator:start/run` rather than creating GitHub sub-issues
 manually. Claude proposes tasks autonomously via `cobbler:measure` and executes them via
@@ -275,10 +283,11 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
    ## Stats
 
-   <output of mage stats with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced. For code issues, the Actual LOC line is mandatory — the Phase 5 Actual LOC gate (step 2 or 3 above) refused to proceed without it>
+   <if mage stats is available, output of mage stats with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced. For code issues, the Actual LOC line is mandatory — the Phase 5 Actual LOC gate (step 2 or 3 above) refused to proceed without it>
 
    ## Test plan
 
+   <if mage audit is available:>
    - [ ] `mage audit` passes
    - [ ] All tests pass
    - [ ] Documentation reviewed for consistency
