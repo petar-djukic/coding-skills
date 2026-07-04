@@ -22,7 +22,7 @@ First, check the current state of work. Treat the issue tracker and the roadmap 
    - Watch for stubs: a function that returns an empty or placeholder result with a "implemented in a later release" comment is not an implementation.
    - If the project exposes a code-readiness check (for example `mage status`), run it and trust it over issue labels.
    Anything that fails these checks is unbuilt regardless of tracker state; plan an implementation task for it before any task that depends on it.
-5. **Run `mage analyze`** to identify specification issues:
+5. **Run `mage audit`** to identify specification issues:
    - Orphaned PRDs (not referenced by use cases)
    - Missing test suites (use cases without test suites)
    - Broken references (invalid touchpoints, missing files)
@@ -34,7 +34,7 @@ Then, summarize:
 2. The high-level architecture (major components and how they fit together)
 3. The current state of implementation (what's done, what's in progress)
 4. **Current release**: Which release we are working on and which use cases remain
-5. Current repo size: run `mage stats:loc` and include its output (Go production/test LOC, doc words)
+5. Current repo size: run `mage stats` and include its output (Go production/test LOC, doc words)
 
 Based on this, propose next steps using **release priority**:
 

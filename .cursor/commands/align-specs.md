@@ -37,7 +37,7 @@ Write each aligned file back to disk in place.
 
 ## 3. Validate
 
-Run `mage analyze` after all files are written.
+Run `mage audit` after all files are written.
 
 Fix any errors it reports. Re-run until it exits 0 or until remaining errors require human input (in which case list them clearly).
 

@@ -98,12 +98,12 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
 ## 4. After writing
 
 1. **Check completeness** against Acceptance Criteria and the format rule checklist
-2. **Run `mage analyze`** to validate documentation consistency. Fix any issues before proceeding.
-3. **Calculate metrics**: tokens used; run `mage stats:loc` for LOC and doc word counts
+2. **Run `mage audit`** to validate documentation consistency. Fix any issues before proceeding.
+3. **Calculate metrics**: tokens used; run `mage stats` for LOC and doc word counts
 4. **Log metrics and close** — the `Actual LOC` line is required; the sub-issue is not done without it:
 
    ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats:loc deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
+   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
    gh issue close <number> --repo <owner>/<repo>
    ```
 
@@ -176,11 +176,11 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
 ## 4. After implementation
 
 1. **Run any tests** to verify your work
-2. **Calculate metrics**: tokens used; run `mage stats:loc` for LOC deltas
+2. **Calculate metrics**: tokens used; run `mage stats` for LOC deltas
 3. **Log metrics and close** — the `Actual LOC` line is required; the sub-issue is not done without it:
 
    ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats:loc deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
+   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
    gh issue close <number> --repo <owner>/<repo>
    ```
 
@@ -225,7 +225,7 @@ If it reaches 0, perform a **thorough code inspection**:
    - Identify which use case(s) this epic contributes to
    - If all criteria are met, update road-map.yaml to mark the use case status as "done"
 8. **Execute `/gh-issue-pop` Phase 5** in full to open and merge the PR
-9. **Summarize epic completion**: run `mage stats:loc` and report what was built, total metrics, deviations, follow-up work, use case status
+9. **Summarize epic completion**: run `mage stats` and report what was built, total metrics, deviations, follow-up work, use case status
 
 ---
 
@@ -234,7 +234,7 @@ If it reaches 0, perform a **thorough code inspection**:
 - All tracking is via `gh issue` and `gh api`
 - Token usage goes in a GitHub comment: `gh issue comment <number> --body "tokens: <count>"`
 - Follow-up work goes in new GitHub issues: `gh issue create --repo <owner>/<repo>`
-- Always run `mage stats:loc` and include the full Stats block in commit messages
+- Always run `mage stats` and include the full Stats block in commit messages
 - Always push after every commit: `git push`
 - **Update road-map.yaml** when use cases are completed
 
