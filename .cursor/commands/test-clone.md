@@ -112,7 +112,7 @@ Summarize:
 2. Total test cases: run / passed / failed / skipped
 3. Fixes applied to the orchestrator
 4. Skipped tests (unfixable)
-5. `mage stats:loc` output from `$ORCH_ROOT`
+5. `mage stats` output from `$ORCH_ROOT`
 
 ```bash
 rm -rf "$(dirname "$REPO_DIR")"
