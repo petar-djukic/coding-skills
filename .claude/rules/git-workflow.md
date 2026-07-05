@@ -11,4 +11,4 @@ All work goes through issues and pull requests. Never commit directly to main.
 - Use `/git-issue-pop` to pop the issue into a worktree branch and open the PR when done.
 - All implementation work happens inside the worktree (`../gh-<number>-<slug>`), never in the main repo directory.
 - One issue per logical change. Small fixes still need an issue.
-- The only exception is an emergency hotfix explicitly authorized by the user in that session.
+- The only exceptions are an emergency hotfix explicitly authorized by the user in that session, and `exp/*` experiment branches which never merge to `main` and never get PRs or issues — keepers are distilled onto `gh-*` branches via the normal flow.
