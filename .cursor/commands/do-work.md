@@ -102,7 +102,7 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
 ## 4. After writing
 
 1. **Check completeness** against Acceptance Criteria and the format rule checklist
-2. **Run `mage audit`** to validate documentation consistency. Fix any issues before proceeding.
+2. **Run the repo's consistency check** — `mage audit`, or `mage analyze` in repos that name the target that way — to validate documentation consistency. Fix any issues before proceeding. Skip if the repo defines neither.
 3. **Calculate metrics**: tokens used; run `mage stats` for LOC and doc word counts
 4. **Log completion** — the `Actual LOC` line is required; the sub-issue is not done without it:
 
