@@ -8,6 +8,13 @@ Distilled from `docs/constitutions/design.yaml`. Read the full constitution for 
 
 Specifications are the source of truth. Code serves specifications, not the other way around. No implementation code before the PRD and use case exist. No implementation issue before a test suite exists for its use case.
 
+## Choosing a Document Type
+
+For documents aimed outside the repository (papers, whitepapers, RFCs,
+specifications, invention disclosures), pick the form from
+[technical-document-types.md](technical-document-types.md). The YAML
+types below govern documents inside the repository.
+
 ## YAML-First
 
 Use YAML for structured documents (VISION, ARCHITECTURE, PRDs, use cases, test suites). Use markdown for prose-heavy guidelines and specification summaries. YAML is machine-readable by design.
