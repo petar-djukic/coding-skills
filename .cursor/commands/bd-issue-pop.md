@@ -198,7 +198,7 @@ reaches it after the last child closes).
    )"
    ```
 
-3. Report the PR URL and stop for review. Do not self-merge — a merge is a second party's decision. Leave the bead `in_progress`; it becomes `done` only when the PR merges (Phase 6).
+3. Report the PR URL and stop for review. Do not self-merge — a merge is a second party's decision. Beads has no git auto-close: merging the PR does not close any bead. The children were closed explicitly by `/do-work`; leave the parent `in_progress` and close it explicitly in Phase 6 once the work is on `main`.
 
 ## Phase 6 -- After the PR merges
 

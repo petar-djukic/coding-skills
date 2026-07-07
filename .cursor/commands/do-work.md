@@ -46,6 +46,8 @@ If this check fails, stop — report "call the matching pop command first" and d
 
   Confirm the exact `bd` flags with `bd ready --help` / `bd update --help` and use the installed forms. Everything else — how to write the doc or the code, the real-work bar, `mage stats`, the Stats block — is identical in both modes.
 
+  **Closing has no automatic path in beads.** gh mode relies on `Closes #<n>` in the commit to auto-close the sub-issue when the PR merges. Beads has no git-integrated auto-close: a `Closes …` line in a commit or PR body does nothing to a bead. So in beads mode you must close each child explicitly with `bd update <child-id> --status done` and commit the `.beads/` change to the worktree branch. That committed close travels with the PR and lands on `main` when it merges — the beads analogue of `Closes #` — while `bd ready` on the branch already sees the child closed, so the queue advances during `do-work`. Never rely on the merge to close a bead; the parent epic is closed explicitly in `/bd-issue-pop` Phase 6 after merge.
+
 ## Task Priority
 
 When selecting from available sub-issues, **prefer documentation sub-issues over code sub-issues**. Documentation establishes the design before implementation begins.
@@ -141,7 +143,7 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
    tokens: <count>"
    ```
 
-   Do not close the sub-issue manually. The commit message contains `Closes #<number>`, which auto-closes it when the PR merges.
+   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` and commit the `.beads/` change (a `Closes …` line would do nothing to a bead).
 
 5. **Commit** changes:
 
@@ -226,7 +228,7 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
    tokens: <count>"
    ```
 
-   Do not close the sub-issue manually. The commit message contains `Closes #<number>`, which auto-closes it when the PR merges.
+   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` and commit the `.beads/` change (a `Closes …` line would do nothing to a bead).
 
 4. **Commit** changes. **Commit message must mention which PRDs are implemented**:
 
