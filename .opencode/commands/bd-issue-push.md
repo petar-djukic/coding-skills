@@ -1,3 +1,7 @@
+---
+description: "Create a bead (task) in the current repository using beads (`bd`). The bead is committed and pushed so it is visible on all machines."
+---
+
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
 Create a bead (task) in the current repository using beads (`bd`). The bead is committed and pushed so it is visible on all machines.

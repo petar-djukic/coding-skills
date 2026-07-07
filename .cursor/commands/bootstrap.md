@@ -1,6 +1,10 @@
 ---
-description: Interactively gather project context and write the initial VISION.yaml and ARCHITECTURE.yaml.
+description: "I'm starting a new project and need you to help me create the initial documentation."
 ---
+
+<!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
+
+# Command: Bootstrap Project
 
 I'm starting a new project and need you to help me create the initial documentation.
 

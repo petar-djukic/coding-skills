@@ -1,6 +1,8 @@
 ---
-description: Pop a GitHub issue into a worktree, decompose it into sub-issues, execute the work, and open a PR when done.
+description: "Pop a GitHub issue from the current repository, decompose it into GitHub sub-issues on a feature branch, and open a PR when all sub-issues are closed."
 ---
+
+<!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
 Pop a GitHub issue from the current repository, decompose it into GitHub sub-issues on a feature branch, and open a PR when all sub-issues are closed.
 
@@ -245,21 +247,17 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
 1. If the issue is recurring (see Phase 6), execute Phase 6 now — before merging — so the next instance exists before this one closes.
 
-2. For the multi-sub-issue path only — verify all sub-issues are closed:
+2. For the multi-sub-issue path only — verify all sub-issues have been completed (each has a completion comment). List sub-issues:
    ```bash
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
-     --jq '[.[] | select(.state=="open")] | length'
+     --jq '[.[] | {number: .number, title: .title, state: .state}]'
    ```
-   If the count is not 0, do not proceed — report which sub-issues are still open.
-
-   **Actual LOC gate (multi-sub-issue).** For each closed sub-issue whose `deliverable_type` is `code`, verify its completion comment contains an `Actual LOC:` line (per eng01-loc-estimation-lifecycle). A sub-issue closed without an `Actual LOC:` record is not done. If any code sub-issue is missing its `Actual LOC:` line, refuse to proceed past this step: report the offending sub-issue numbers and stop. Do not open the PR, do not add the completion comment, and do not merge. The gate is structural, not advisory — estimation accuracy cannot be audited without both values. Documentation sub-issues (`deliverable_type: documentation`) do not carry LOC and are exempt.
+   If any sub-issue lacks a completion comment, or its comment has no `Actual LOC:` line (compared against that issue's `Estimated LOC`), do not proceed — a sub-issue is not done until both the completion comment and the Actual LOC are recorded. Report which sub-issues still need work.
 
 3. For the single-issue path — add a comment to the parent issue summarizing what was done:
    ```bash
    gh issue comment <number> --repo <owner>/<repo> --body "<summary of work: what changed, files touched, tokens used. Actual LOC: production/test lines from `mage stats` deltas, stated against the issue's Estimated LOC so estimation accuracy is on record>"
    ```
-
-   **Actual LOC gate (single-issue).** Before posting the completion comment, check the parent issue's `deliverable_type`. If it is `code`, the comment must contain an `Actual LOC:` line with production and test counts from `mage stats` deltas, stated against the issue's `Estimated LOC`. If the `Actual LOC:` line is absent, refuse to proceed past this step: do not push, do not open the PR, and do not merge. Report that the Actual LOC record is missing and stop. Documentation issues do not carry LOC and are exempt.
 
 4. Push the final state of the feature branch:
    ```bash
@@ -283,7 +281,7 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
    ## Stats
 
-   <if mage stats is available, output of mage stats with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced. For code issues, the Actual LOC line is mandatory — the Phase 5 Actual LOC gate (step 2 or 3 above) refused to proceed without it>
+   <if mage stats is available, output of mage stats with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced>
 
    ## Test plan
 
@@ -293,11 +291,14 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
    - [ ] Documentation reviewed for consistency
 
    Closes #<number>
+   Closes #<sub-issue-1>
+   Closes #<sub-issue-2>
+   ...
    EOF
    )"
    ```
 
-   The `Closes #<number>` line auto-closes the parent GitHub issue when the PR merges.
+   The `Closes #<number>` lines auto-close the parent and all sub-issues when the PR merges. For the single-issue path, only the parent `Closes` line is needed. Sub-issue commits also contain `Closes #<sub-issue>` as a redundant safeguard.
 
 6. Merge the pull request and delete the remote feature branch:
    ```bash
@@ -316,16 +317,20 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
    git branch -d gh-<number>-<slug>
    ```
 
-9. Verify the parent GitHub issue was closed by the merge:
+9. Verify all issues were closed by the merge. Check the parent and every sub-issue:
    ```bash
    gh issue view <number> --repo <owner>/<repo> --json state -q .state
+   # For multi-sub-issue path, also check each sub-issue:
+   gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
+     --jq '[.[] | select(.state=="open") | {number: .number, title: .title}]'
    ```
-   If still open, close it explicitly:
+   If any issue is still open, warn the user and close it explicitly:
    ```bash
-   gh issue close <number> --repo <owner>/<repo> --comment "Completed via PR #<pr-number>"
+   # WARNING: GitHub did not auto-close issue #<N> from the PR merge.
+   gh issue close <N> --repo <owner>/<repo> --comment "Completed via PR #<pr-number>. Auto-close did not trigger."
    ```
 
-10. Report the PR URL and confirm the issue is closed.
+10. Report the PR URL and confirm all issues (parent and sub-issues) are closed.
 
 **Note:** Phase 5 may happen in a later session. When running `/do-work` and closing the last sub-issue, check the open sub-issue count and execute Phase 5 automatically if it reaches 0.
 

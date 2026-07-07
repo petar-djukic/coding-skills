@@ -1,3 +1,7 @@
+---
+description: "Create or join an experiment branch. Experiments run on short-lived `exp/<slug>` branches in a dedicated worktree. They never merge to `main` and neve"
+---
+
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
 Create or join an experiment branch. Experiments run on short-lived `exp/<slug>` branches in a dedicated worktree. They never merge to `main` and never get PRs or issues. Keepers are distilled onto `gh-*` branches via `/gh-issue-push` + `/gh-issue-pop`.

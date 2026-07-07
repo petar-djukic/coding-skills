@@ -1,6 +1,10 @@
 ---
-description: Pick and execute the next open sub-issue on the current branch's parent epic, using the documentation or code workflow as appropriate.
+description: "Pick **one** of the two workflows below depending on the deliverable type. Use **Documentation workflow** for docs under `docs/`, **Code workflow** fo"
 ---
+
+<!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
+
+# Command: Do Work
 
 Pick **one** of the two workflows below depending on the deliverable type. Use **Documentation workflow** for docs under `docs/`, **Code workflow** for implementation under `pkg/`, `internal/`, `cmd/`.
 
@@ -54,9 +58,9 @@ If a sub-issue is bigger than you can complete reliably as a single issue in one
    gh issue edit <number> --repo <owner>/<repo> --add-assignee @me
    ```
 
-| Deliverable       | Workflow                                                  | Indicators                                                                                                                          |
-|-------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| **Documentation** | [Documentation Workflow](#documentation-workflow)         | Output path under `docs/`; has "Required sections", "Format rule", or doc format name                                              |
+| Deliverable      | Workflow                                                  | Indicators                                                                                                                          |
+|------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| **Documentation** | [Documentation Workflow](#documentation-workflow)         | Output path under `docs/`; has "Required sections", "Format rule", or doc format name                                             |
 | **Code**          | [Code Workflow](#code-workflow)                           | Output under `pkg/`, `internal/`, `cmd/`; has Requirements, Design Decisions, Acceptance Criteria with tests or observable behaviour |
 
 ---
@@ -100,18 +104,26 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
 1. **Check completeness** against Acceptance Criteria and the format rule checklist
 2. **Run `mage audit`** to validate documentation consistency. Fix any issues before proceeding.
 3. **Calculate metrics**: tokens used; run `mage stats` for LOC and doc word counts
-4. **Log metrics and close** — the `Actual LOC` line is required; the sub-issue is not done without it:
+4. **Log completion** — the `Actual LOC` line is required; the sub-issue is not done without it:
 
    ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
-   gh issue close <number> --repo <owner>/<repo>
+   gh issue comment <number> --repo <owner>/<repo> --body "Completed in commit <sha>.
+
+   <summary of work>
+
+   Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>)
+   tokens: <count>"
    ```
+
+   Do not close the sub-issue manually. The commit message contains `Closes #<number>`, which auto-closes it when the PR merges.
 
 5. **Commit** changes:
 
    ```bash
    git add -A
-   git commit -m "Add <doc name> (<output path>) (GH-<parent>#<sub-issue>)
+   git commit -m "Add <doc name> (<output path>) (GH-<parent>)
+
+   Closes #<sub-issue>
 
    Stats:
      Lines of code (Go, production): <prod_loc> (+<delta>)
@@ -127,7 +139,7 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
 
 ## 5. After completing the last sub-issue (documentation)
 
-When you close a sub-issue and the open count drops to 0:
+After completing work on a sub-issue, check whether all sub-issues have completion comments. If all have been completed:
 
 1. **Review all docs** created or modified during the epic for consistency
 2. **Verify parent issue acceptance criteria**
@@ -177,18 +189,26 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
 
 1. **Run any tests** to verify your work
 2. **Calculate metrics**: tokens used; run `mage stats` for LOC deltas
-3. **Log metrics and close** — the `Actual LOC` line is required; the sub-issue is not done without it:
+3. **Log completion** — the `Actual LOC` line is required; the sub-issue is not done without it:
 
    ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>); tokens: <count>"
-   gh issue close <number> --repo <owner>/<repo>
+   gh issue comment <number> --repo <owner>/<repo> --body "Completed in commit <sha>.
+
+   <summary of work>
+
+   Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>)
+   tokens: <count>"
    ```
+
+   Do not close the sub-issue manually. The commit message contains `Closes #<number>`, which auto-closes it when the PR merges.
 
 4. **Commit** changes. **Commit message must mention which PRDs are implemented**:
 
    ```bash
    git add -A
-   git commit -m "Implement X (prd-feature-name) (GH-<parent>#<sub-issue>)
+   git commit -m "Implement X (prd-feature-name) (GH-<parent>)
+
+   Closes #<sub-issue>
 
    - Description of changes
 
@@ -206,14 +226,7 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
 
 ## 5. After completing the last sub-issue (code)
 
-When you close a sub-issue, check the open count:
-
-```bash
-gh api repos/<owner>/<repo>/issues/<parent>/sub_issues \
-  --jq '[.[] | select(.state=="open")] | length'
-```
-
-If it reaches 0, perform a **thorough code inspection**:
+After completing work on a sub-issue, check whether all sub-issues have completion comments. If all have been completed, perform a **thorough code inspection**:
 
 1. **Read all files** created or modified during the epic
 2. **Check for inconsistencies**: naming conventions, error handling, duplication, test coverage gaps

@@ -1,6 +1,10 @@
 ---
-description: Align all specification files in docs/ to the design constitution format, fix naming and traceability, then commit.
+description: "Read **docs/constitutions/design.yaml** first and hold it as the authority for the rest of this session."
 ---
+
+<!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
+
+# Command: Align Specs
 
 Read **docs/constitutions/design.yaml** first and hold it as the authority for the rest of this session.
 

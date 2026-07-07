@@ -1,3 +1,7 @@
+---
+description: "Pop a bead into a worktree branch, work on it, and open a PR when done. Uses beads (`bd`) for task tracking and git for branch management. Every statu"
+---
+
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
 Pop a bead into a worktree branch, work on it, and open a PR when done. Uses beads (`bd`) for task tracking and git for branch management. Every status change is committed and pushed so state is shared across machines.

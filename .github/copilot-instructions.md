@@ -14,7 +14,8 @@ conventions and points to the canonical sources instead of duplicating them.
 | Instructions | `.claude/instructions.md` | Quality gates, commit discipline, workflow |
 | Rules | `.claude/rules/*.md` | Git workflow, documentation standards, formats |
 | Commands | `.claude/commands/*.md` (mirrored in `.cursor/commands/`, `.opencode/commands/`) | Workflow templates: issue push/pop, experiments, releases |
-| Skills | `.claude/skills/**` (mirrored in `.cursor/skills/`) | update-references, audit-references, match-voice, de-ai |
+| Prompts | `.github/prompts/*.prompt.md` | One thin adapter per command; each points at its canonical `.claude/commands/` file |
+| Skills | `.claude/skills/**` (mirrored in `.cursor/skills/`, `.opencode/skills/`) | update-references, audit-references, match-voice, de-ai, patent-disclosure |
 
 ## Core conventions Copilot must respect
 
