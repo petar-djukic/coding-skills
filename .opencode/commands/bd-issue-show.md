@@ -1,3 +1,7 @@
+---
+description: "List beads or show details of a specific bead in the current repository."
+---
+
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
 List beads or show details of a specific bead in the current repository.

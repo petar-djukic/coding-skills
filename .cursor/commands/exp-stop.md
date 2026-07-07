@@ -1,3 +1,7 @@
+---
+description: "Conclude and delete an experiment branch. Shows pending work and a diffstat for a final review, then deletes the current repository's experiment branc"
+---
+
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
 Conclude and delete an experiment branch. Shows pending work and a diffstat for a final review, then deletes the current repository's experiment branch, worktree, and local metadata. Handles both local-only and remote-backed (subtree-synced) experiments.

@@ -1,10 +1,14 @@
 ---
-description: Deploy the orchestrator into a target Go repository (module@version or local path), run the test plan, fix failures, and report results.
+description: "Test the orchestrator library by deploying it into a target Go repository and running the test plan. Failures indicate bugs in the orchestrator code, "
 ---
+
+<!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
+
+# Command: Test Clone
 
 Test the orchestrator library by deploying it into a target Go repository and running the test plan. Failures indicate bugs in the orchestrator code, which get fixed in this repository.
 
-## Input
+## Arguments
 
 $ARGUMENTS is a Go module reference in `module@version` format, or a local directory path.
 

@@ -1,5 +1,5 @@
 ---
-description: Run the full release workflow: audit, test, tag with annotated changelog, and push to all remotes.
+description: "Run the full release workflow: audit, test, tag, and push."
 ---
 
 Run the full release workflow: audit, test, tag, and push.

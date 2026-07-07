@@ -1,6 +1,10 @@
 ---
-description: Orient to the project state, identify the next highest-priority work, and propose a breakdown of issues with required reading and acceptance criteria.
+description: "Read the following files to understand the project:"
 ---
+
+<\!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
+
+# Command: Make Work
 
 Read the following files to understand the project:
 

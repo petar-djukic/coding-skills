@@ -1,5 +1,5 @@
 ---
-description: Create a GitHub issue in the current repository from a description. Classifies as bug or enhancement automatically.
+description: "Create a GitHub issue in the current repository."
 ---
 
 Create a GitHub issue in the current repository.
