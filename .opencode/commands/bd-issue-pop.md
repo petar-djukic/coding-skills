@@ -97,18 +97,23 @@ After user approval:
    ```
 
 4. Create the child beads (multi-child breakdown only). For each approved
-   child, create a bead and capture its id, then record its dependency edges so
-   it is blocked until its prerequisites are done, and link it under the parent
-   so the parent is not workable until its children complete:
+   child, create a bead **labelled with the parent id** and capture its id, then
+   record its dependency edges so it is blocked until its prerequisites are
+   done, and link it under the parent so the parent is not workable until its
+   children complete:
    ```bash
-   bd create "<child title>"                 # capture <child-id>
+   bd create "<child title>" --label <id>     # label = parent id; capture <child-id>
    bd dep add <child-id> <prereq-child-id>    # one per prerequisite
    bd dep add <id> <child-id>                 # parent depends on the child
    ```
-   The exact flags for dependencies vary by `bd` version — confirm with
-   `bd dep --help` and `bd create --help` and use the installed forms (the
-   parent-depends-on-child edge is what makes the parent close only after its
-   children). Then commit and push so the graph is shared across machines:
+   The label ties each child to this parent so Phase 4b can scope the ready
+   queue to them (`bd ready` is global — see Phase 4b). The exact flags for the
+   label and dependencies vary by `bd` version — confirm with `bd create --help`
+   and `bd dep --help` and use the installed forms (the parent-depends-on-child
+   edge is what makes the parent close only after its children). Keep the list
+   of child ids you created; it is the fallback scope if the installed `bd`
+   cannot filter `bd ready` by label. Then commit and push so the graph is
+   shared across machines:
    ```bash
    git add .beads/
    git commit -m "bd: decompose <id> into child beads"
@@ -143,11 +148,18 @@ Do the work inside the worktree — this phase is where the bead is actually imp
    git branch --show-current  # should show bd-<id>-<slug>
    ```
 
-2. Work the children off the ready queue, in dependency order. Repeat until no
-   child of this parent is ready:
+2. Work the children off the ready queue, in dependency order. **Invariant:
+   `bd-issue-pop` only ever implements beads that belong to the popped parent —
+   never a bead from another epic.** `bd ready` is global (it lists every
+   unblocked bead in the repo, and a repo can have several open epics), so scope
+   it to this parent's children by the label added in Phase 4:
    ```bash
-   bd ready        # the unblocked beads; confirm the flags with `bd ready --help`
+   bd ready --label <id>    # only this parent's ready children; confirm with `bd ready --help`
    ```
+   If the installed `bd` cannot filter `bd ready` by label, run plain `bd ready`
+   and intersect its output with the child ids you captured in Phase 4 — take
+   only those. Never take a ready bead that is not one of this parent's children.
+
    For the next ready child of this parent:
    - implement it with `/do-work` inside the worktree, committing as you go with
      `Skill: do-work` / `Called-by: bd-issue-pop` trailers;
@@ -161,9 +173,11 @@ Do the work inside the worktree — this phase is where the bead is actually imp
      bd update <child-id> --status done
      git add .beads/ && git commit -m "bd: complete child <child-id>" && git push
      ```
-   Then re-run `bd ready` and take the next one. `bd ready` reflects the
-   dependency edges, so this walks the children in a valid order and never
-   starts a blocked child.
+   Then re-check the parent-scoped ready queue and take the next one. It reflects
+   the dependency edges, so this walks the children in a valid order and never
+   starts a blocked child. Stop when no child of this parent is ready — even if
+   the global `bd ready` still lists work from other epics; that work is not
+   ours.
 
    For a single-unit breakdown (no children), implement the parent bead directly
    with `/do-work` under the same real-work bar, and record its `Actual LOC`:
@@ -228,7 +242,7 @@ Run this once the PR has been merged (by the user, or on their explicit approval
    (Phase 4b), so the parent's dependencies are satisfied; confirm none is still
    open before closing the parent:
    ```bash
-   bd ready              # no child of <id> should appear
+   bd ready --label <id>   # this parent's children — none should remain
    bd update <id> --status done
    git add .beads/
    git commit -m "bd: complete bead <id>"
