@@ -1,6 +1,8 @@
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
-Pop a bead into a worktree branch, work on it, and open a PR when done. Uses beads (`bd`) for task tracking and git for branch management. Every status change is committed and pushed so state is shared across machines.
+Pop a bead into a worktree branch, do the work, and open a PR — in one continuous run. Uses beads (`bd`) for task tracking and git for branch management. Every status change is committed and pushed so state is shared across machines.
+
+This command is a single sequence, not a set of independently-invoked steps: Sync → Fetch → Context → Breakdown → Worktree → **Implement** → PR. The only interactive pause is the Phase 3 breakdown approval. After approval it runs straight through to an open PR — popping the bead is the *start* of the work, not the end of it. Do not stop after creating the worktree.
 
 ## Input
 
@@ -10,13 +12,19 @@ If arguments contain a bead ID, use that bead. If no ID is given, run `bd list` 
 
 ## Phase 0 -- Sync and Validate
 
-1. Pull the latest state and sync beads:
+1. Detect the repo (used for the PR commands in Phase 5):
+   ```bash
+   gh repo view --json nameWithOwner -q .nameWithOwner
+   ```
+   Use the result as `<owner>/<repo>` throughout.
+
+2. Pull the latest state and sync beads:
    ```bash
    git pull
    bd sync
    ```
 
-2. Confirm we are in the main repo directory on `main`, not inside a worktree:
+3. Confirm we are in the main repo directory on `main`, not inside a worktree:
    ```bash
    git branch --show-current
    ```
@@ -90,27 +98,41 @@ After user approval:
    git push -u origin bd-<id>-<slug>
    ```
 
-6. Report the worktree path to the user. Work proceeds via `/do-work` inside the worktree.
+6. Continue immediately to Phase 4b — do not stop here. Popping the bead only set up the branch; the work has not been done yet.
+
+## Phase 4b -- Implement the Work
+
+Do the work inside the worktree — this phase is where the bead is actually implemented, and it runs without a further hand-off.
+
+1. Verify the worktree branch before starting:
+   ```bash
+   cd ../bd-<id>-<slug>
+   git branch --show-current  # should show bd-<id>-<slug>
+   ```
+
+2. Implement the approved breakdown by running `/do-work` inside the worktree. If the bead was decomposed into child beads, run `/do-work` once per child until every child is `done`; otherwise do the single unit of work. Commit as you go, with `Skill: do-work` / `Called-by: bd-issue-pop` trailers.
+
+3. The bead is not complete until the work is real: the files in the breakdown exist and are implemented (not stubs), and any available checks pass (`mage audit`/tests if present). Do not proceed to Phase 5 with an empty or stub branch.
+
+4. Record an `Actual LOC` figure (production/test lines produced, from `mage stats` deltas if available) against the bead's estimate, as a note on the bead:
+   ```bash
+   bd comment <id> "Actual LOC: <n> (est <m>). <one-line summary of what was built>"
+   ```
+   If the installed `bd` has no `comment` subcommand, put the same line in the bead's notes via `bd update`, or carry it into the PR body.
+
+When the work is complete and verified, proceed to Phase 5.
 
 ## Phase 5 -- Open a Pull Request
 
-Trigger Phase 5 when the work is complete.
+Trigger Phase 5 when the work is complete and verified (Phase 4b done).
 
-1. Update the bead status to done, commit, and push:
+1. Push the final state of the feature branch:
    ```bash
    cd ../bd-<id>-<slug>
-   bd update <id> --status done
-   git add .beads/
-   git commit -m "bd: complete bead <id>"
    git push
    ```
 
-2. Push the final state of the feature branch:
-   ```bash
-   git push
-   ```
-
-3. Open a pull request against `main`:
+2. Open a pull request against `main`:
    ```bash
    gh pr create --repo <owner>/<repo> \
      --base main \
@@ -133,28 +155,38 @@ Trigger Phase 5 when the work is complete.
    - [ ] Documentation reviewed for consistency
 
    Bead: <id>
+   Actual LOC: <n> (est <m>)
    EOF
    )"
    ```
 
-4. Merge the pull request and delete the remote feature branch:
+3. Report the PR URL and stop for review. Do not self-merge — a merge is a second party's decision. Leave the bead `in_progress`; it becomes `done` only when the PR merges (Phase 6).
+
+## Phase 6 -- After the PR merges
+
+Run this once the PR has been merged (by the user, or on their explicit approval). The bead is done only when the work is on `main`.
+
+1. Mark the bead done and sync:
    ```bash
-   gh pr merge --repo <owner>/<repo> --merge --delete-branch
+   bd update <id> --status done
+   git add .beads/
+   git commit -m "bd: complete bead <id>"
+   git push
    ```
 
-5. Pull the merged changes into main and sync beads:
+2. Pull the merged changes into main and sync beads:
    ```bash
    git pull origin main
    bd sync
    ```
 
-6. Remove the worktree and delete the local branch:
+3. Remove the worktree and delete the local branch:
    ```bash
    git worktree remove ../bd-<id>-<slug>
    git branch -d bd-<id>-<slug>
    ```
 
-7. Report the PR URL and confirm the bead is marked done.
+4. Report that the bead is marked done and the worktree is cleaned up.
 
 ## Skill Tracing
 
