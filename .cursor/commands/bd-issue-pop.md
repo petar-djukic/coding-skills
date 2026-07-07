@@ -52,7 +52,7 @@ If arguments contain a bead ID, use that bead. If no ID is given, run `bd list` 
    mage -l 2>/dev/null || true
    ```
    Record which targets exist. If `mage` is not installed or the repo has no Magefile, treat all mage targets as absent and skip mage-dependent steps silently.
-4. If `audit` appeared in the probe, run `mage audit`. Otherwise skip.
+4. If the probe shows a consistency-check target — commonly `audit` or `analyze` — run it (`mage audit` or `mage analyze`). Otherwise skip.
 5. If `stats` appeared in the probe, run `mage stats`. Otherwise skip.
 6. Summarize the current project state.
 
@@ -165,7 +165,7 @@ Do the work inside the worktree — this phase is where the bead is actually imp
      `Skill: do-work` / `Called-by: bd-issue-pop` trailers;
    - a child is not done until its work is real — the files in its breakdown
      exist and are implemented (not stubs), and any available checks pass
-     (`mage audit`/tests if present);
+     (the consistency check — `mage audit` / `mage analyze` — and tests, if present);
    - record its `Actual LOC` against its estimate, then close it, which unblocks
      its dependents:
      ```bash
@@ -221,8 +221,8 @@ Trigger Phase 5 when the work is complete and verified (Phase 4b done).
 
    ## Test plan
 
-   <if mage audit is available:>
-   - [ ] `mage audit` passes
+   <if a consistency-check target is available:>
+   - [ ] the consistency check (`mage audit` / `mage analyze`) passes
    - [ ] All tests pass
    - [ ] Documentation reviewed for consistency
 

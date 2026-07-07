@@ -28,7 +28,7 @@ Write both files to the `docs/` directory. Do not create any issues, epics, or t
 
 ## Validation
 
-After writing the documents, run **`mage audit`** to check for broken references or missing fields.
+After writing the documents, run the repo's consistency check — **`mage audit`**, or **`mage analyze`** in repos that name the target that way — to check for broken references or missing fields.
 
 Fix any issues before finalizing.
 

@@ -38,7 +38,7 @@ If arguments contain an issue number (e.g. `42` or `#42`), use that issue. If ar
    mage -l 2>/dev/null || true
    ```
    Record which targets exist. If `mage` is not installed or the repo has no Magefile, treat all mage targets as absent and skip mage-dependent steps silently.
-5. If `audit` appeared in the probe, run `mage audit` to identify spec issues. Otherwise skip.
+5. If the probe shows a consistency-check target — commonly `audit` or `analyze` — run it (`mage audit` or `mage analyze`) to identify spec issues. Otherwise skip.
 6. If `stats` appeared in the probe, run `mage stats` for current LOC and documentation metrics. Otherwise skip.
 7. Summarize the current project state.
 
@@ -281,8 +281,8 @@ For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the par
 
    ## Test plan
 
-   <if mage audit is available:>
-   - [ ] `mage audit` passes
+   <if a consistency-check target is available:>
+   - [ ] the consistency check (`mage audit` / `mage analyze`) passes
    - [ ] All tests pass
    - [ ] Documentation reviewed for consistency
 
