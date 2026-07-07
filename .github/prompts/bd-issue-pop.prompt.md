@@ -59,15 +59,23 @@ If arguments contain a bead ID, use that bead. If no ID is given, run `bd list` 
 
 ## Phase 3 -- Propose Breakdown
 
-Using the bead as the task description, propose the work breakdown:
+Decompose the bead into child beads — the beads-native equivalent of an epic's
+sub-issues. For each child, specify:
 
-- Type: documentation or code
+- Title and type (documentation or code)
 - Required Reading: mandatory list of files
 - Files to Create/Modify: explicit file list
 - Structure: Requirements, Design Decisions (optional), Acceptance Criteria
-- Code task sizing: 300-700 lines of production code, no more than 5 files
+- `Estimated LOC` for code children
+- Dependencies: which sibling children must finish first
+- Code task sizing: 300-700 lines of production code, no more than 5 files per child
 
-Present the proposal to the user for approval. Do not create anything until the user agrees.
+Present the children and their dependency ordering explicitly (a short list or
+a small graph — "C depends on A, B") for approval. This is the single
+interactive pause. Do not create any beads until the user agrees.
+
+If the natural breakdown is a single unit of work, say so — no child beads are
+created; the parent bead is worked directly (the single-unit path in Phase 4).
 
 ## Phase 4 -- Create Worktree and Start Work
 
@@ -81,7 +89,7 @@ After user approval:
    ```
    All subsequent work happens inside this worktree.
 
-3. Update the bead status to in_progress, commit, and push:
+3. Update the parent bead status to in_progress, commit, and push:
    ```bash
    bd update <id> --status in_progress
    git add .beads/
@@ -89,7 +97,28 @@ After user approval:
    git push
    ```
 
-4. Commit an initial marker in the worktree:
+4. Create the child beads (multi-child breakdown only). For each approved
+   child, create a bead and capture its id, then record its dependency edges so
+   it is blocked until its prerequisites are done, and link it under the parent
+   so the parent is not workable until its children complete:
+   ```bash
+   bd create "<child title>"                 # capture <child-id>
+   bd dep add <child-id> <prereq-child-id>    # one per prerequisite
+   bd dep add <id> <child-id>                 # parent depends on the child
+   ```
+   The exact flags for dependencies vary by `bd` version — confirm with
+   `bd dep --help` and `bd create --help` and use the installed forms (the
+   parent-depends-on-child edge is what makes the parent close only after its
+   children). Then commit and push so the graph is shared across machines:
+   ```bash
+   git add .beads/
+   git commit -m "bd: decompose <id> into child beads"
+   git push
+   ```
+   For a single-unit breakdown, skip this step — there are no children and the
+   parent bead is the unit of work.
+
+5. Commit an initial marker in the worktree:
    ```bash
    cd ../bd-<id>-<slug>
    git commit --allow-empty -m "Pop bd-<id>: <title> into worktree
@@ -98,12 +127,12 @@ After user approval:
    Called-by: user"
    ```
 
-5. Push the branch:
+6. Push the branch:
    ```bash
    git push -u origin bd-<id>-<slug>
    ```
 
-6. Continue immediately to Phase 4b — do not stop here. Popping the bead only set up the branch; the work has not been done yet.
+7. Continue immediately to Phase 4b — do not stop here. Popping the bead only set up the branch and the child graph; the work has not been done yet.
 
 ## Phase 4b -- Implement the Work
 
@@ -115,17 +144,42 @@ Do the work inside the worktree — this phase is where the bead is actually imp
    git branch --show-current  # should show bd-<id>-<slug>
    ```
 
-2. Implement the approved breakdown by running `/do-work` inside the worktree. If the bead was decomposed into child beads, run `/do-work` once per child until every child is `done`; otherwise do the single unit of work. Commit as you go, with `Skill: do-work` / `Called-by: bd-issue-pop` trailers.
-
-3. The bead is not complete until the work is real: the files in the breakdown exist and are implemented (not stubs), and any available checks pass (`mage audit`/tests if present). Do not proceed to Phase 5 with an empty or stub branch.
-
-4. Record an `Actual LOC` figure (production/test lines produced, from `mage stats` deltas if available) against the bead's estimate, as a note on the bead:
+2. Work the children off the ready queue, in dependency order. Repeat until no
+   child of this parent is ready:
    ```bash
-   bd comment <id> "Actual LOC: <n> (est <m>). <one-line summary of what was built>"
+   bd ready        # the unblocked beads; confirm the flags with `bd ready --help`
    ```
-   If the installed `bd` has no `comment` subcommand, put the same line in the bead's notes via `bd update`, or carry it into the PR body.
+   For the next ready child of this parent:
+   - implement it with `/do-work` inside the worktree, committing as you go with
+     `Skill: do-work` / `Called-by: bd-issue-pop` trailers;
+   - a child is not done until its work is real — the files in its breakdown
+     exist and are implemented (not stubs), and any available checks pass
+     (`mage audit`/tests if present);
+   - record its `Actual LOC` against its estimate, then close it, which unblocks
+     its dependents:
+     ```bash
+     bd comment <child-id> "Actual LOC: <n> (est <m>). <one-line summary>"
+     bd update <child-id> --status done
+     git add .beads/ && git commit -m "bd: complete child <child-id>" && git push
+     ```
+   Then re-run `bd ready` and take the next one. `bd ready` reflects the
+   dependency edges, so this walks the children in a valid order and never
+   starts a blocked child.
 
-When the work is complete and verified, proceed to Phase 5.
+   For a single-unit breakdown (no children), implement the parent bead directly
+   with `/do-work` under the same real-work bar, and record its `Actual LOC`:
+   ```bash
+   bd comment <id> "Actual LOC: <n> (est <m>). <one-line summary>"
+   ```
+   (If the installed `bd` has no `comment`, put the line in the bead notes via
+   `bd update`, or carry it into the PR body.)
+
+3. Do not proceed to Phase 5 with an empty or stub branch, or while any child of
+   this parent is still open.
+
+When every child is done (or the single unit is complete) and verified, proceed
+to Phase 5. Leave the parent bead `in_progress` — it closes only after the PR
+merges (Phase 6).
 
 ## Phase 5 -- Open a Pull Request
 
@@ -171,8 +225,11 @@ Trigger Phase 5 when the work is complete and verified (Phase 4b done).
 
 Run this once the PR has been merged (by the user, or on their explicit approval). The bead is done only when the work is on `main`.
 
-1. Mark the bead done and sync:
+1. Mark the parent bead done and sync. All its children are already closed
+   (Phase 4b), so the parent's dependencies are satisfied; confirm none is still
+   open before closing the parent:
    ```bash
+   bd ready              # no child of <id> should appear
    bd update <id> --status done
    git add .beads/
    git commit -m "bd: complete bead <id>"
