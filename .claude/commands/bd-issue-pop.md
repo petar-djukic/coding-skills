@@ -2,7 +2,7 @@
 
 Pop a bead (epic) into a worktree branch and decompose it into child beads, then hand off to `/do-work` — mirroring the gh flow (`gh-issue-pop` sets up; `/do-work` does the work). Uses beads (`bd`) for task tracking and git for branch management. Every status change is committed and pushed so state is shared across machines.
 
-The division of labor matches `gh-issue-pop`: this command syncs, fetches the bead, gathers context, proposes the breakdown (the single interactive pause), and sets up the worktree plus the child-bead graph — then stops. `/do-work`, run repeatedly, works one ready child per pass on the shared worktree branch until all are done, and opens the PR after the last. All the epic's work lands on the one `bd-<id>-<slug>` branch and closes via its single PR.
+The division of labor matches `gh-issue-pop`: this command syncs, fetches the bead, gathers context, proposes the breakdown (the single interactive pause), and sets up the worktree plus the child-bead graph — then stops. `/do-work`, run repeatedly, works one ready child per pass on the shared worktree branch until all are done; the last pass merges the PR to `main` and closes the epic automatically. All the epic's work lands on the one `bd-<id>-<slug>` branch and closes via its single PR.
 
 ## Input
 
@@ -148,22 +148,30 @@ Repeat until no child of this epic is ready.
 One worktree, one PR per epic: every child lands on this one branch; `/do-work`
 never creates a branch or worktree per child. If a child turns out too big,
 `/do-work` splits it into sibling children under this epic (same worktree) — it
-does not pop again. When the last child closes, `/do-work` triggers Phase 5
-automatically. For a single-unit breakdown (no children), `/do-work` works the
-parent bead directly.
+does not pop again. When the last child closes, `/do-work` runs Phase 5
+automatically — it merges the PR to `main`, closes the epic, and cleans up. For
+a single-unit breakdown (no children), `/do-work` works the parent bead
+directly, then runs Phase 5 the same way.
 
 The invariant holds throughout: only ever implement beads that belong to this
 epic — never a bead from another epic that happens to be ready.
 
-## Phase 5 -- Open a Pull Request
+## Phase 5 -- Merge and Close the Epic
 
-Trigger Phase 5 when every child of the epic is done and verified (`/do-work`
-reaches it after the last child closes).
+The last `/do-work` pass reaches this automatically after it closes the final
+child. It opens the PR, merges it to `main`, closes the epic, and cleans up — no
+manual step. (Verify first that every child is done and the work is real; do not
+merge a stub branch.)
 
-1. Push the final state of the feature branch:
+1. Close the parent bead **on the branch**. All children are done, so its
+   dependencies are satisfied. Beads has no git auto-close, so committing the
+   close on the branch is the analogue of `Closes #` — it travels with the PR
+   and lands on `main` at merge, with no direct commit to `main`:
    ```bash
    cd ../bd-<id>-<slug>
-   git push
+   bd ready --label <id>   # this epic's children — none should remain
+   bd update <id> --status done
+   git add .beads/ && git commit -m "bd: complete epic <id>" && git push
    ```
 
 2. Open a pull request against `main`:
@@ -194,36 +202,27 @@ reaches it after the last child closes).
    )"
    ```
 
-3. Report the PR URL and stop for review. Do not self-merge — a merge is a second party's decision. Beads has no git auto-close: merging the PR does not close any bead. The children were closed explicitly by `/do-work`; leave the parent `in_progress` and close it explicitly in Phase 6 once the work is on `main`.
-
-## Phase 6 -- After the PR merges
-
-Run this once the PR has been merged (by the user, or on their explicit approval). The bead is done only when the work is on `main`.
-
-1. Mark the parent bead done and sync. All its children are already closed
-   (by `/do-work`), so the parent's dependencies are satisfied; confirm none is
-   still open before closing the parent:
+3. Merge the pull request and delete the remote branch:
    ```bash
-   bd ready --label <id>   # this parent's children — none should remain
-   bd update <id> --status done
-   git add .beads/
-   git commit -m "bd: complete bead <id>"
-   git push
+   gh pr merge --repo <owner>/<repo> --merge --delete-branch
    ```
 
-2. Pull the merged changes into main and sync beads:
+4. From the main repo directory, pull the merged changes and sync beads (the
+   epic and all children are now closed on `main`):
    ```bash
+   cd -                    # back to the main repo checkout on `main`
    git pull origin main
    bd sync
    ```
 
-3. Remove the worktree and delete the local branch:
+5. Remove the worktree and delete the local branch:
    ```bash
    git worktree remove ../bd-<id>-<slug>
    git branch -d bd-<id>-<slug>
    ```
 
-4. Report that the bead is marked done and the worktree is cleaned up.
+6. Report the PR URL, that it merged, and that the epic and its children are
+   closed.
 
 ## Skill Tracing
 

@@ -46,7 +46,7 @@ If this check fails, stop — report "call the matching pop command first" and d
 
   Confirm the exact `bd` flags with `bd ready --help` / `bd update --help` and use the installed forms. Everything else — how to write the doc or the code, the real-work bar, `mage stats`, the Stats block — is identical in both modes.
 
-  **Closing has no automatic path in beads.** gh mode relies on `Closes #<n>` in the commit to auto-close the sub-issue when the PR merges. Beads has no git-integrated auto-close: a `Closes …` line in a commit or PR body does nothing to a bead. So in beads mode you must close each child explicitly with `bd update <child-id> --status done` and commit the `.beads/` change to the worktree branch. That committed close travels with the PR and lands on `main` when it merges — the beads analogue of `Closes #` — while `bd ready` on the branch already sees the child closed, so the queue advances during `do-work`. Never rely on the merge to close a bead; the parent epic is closed explicitly in `/bd-issue-pop` Phase 6 after merge.
+  **Closing has no automatic path in beads.** gh mode relies on `Closes #<n>` in the commit to auto-close the sub-issue when the PR merges. Beads has no git-integrated auto-close: a `Closes …` line in a commit or PR body does nothing to a bead. So in beads mode you must close each child explicitly with `bd update <child-id> --status done` and commit the `.beads/` change to the worktree branch. That committed close travels with the PR and lands on `main` when it merges — the beads analogue of `Closes #` — while `bd ready` on the branch already sees the child closed, so the queue advances during `do-work`. Never rely on the merge to close a bead. The parent epic is closed the same way — explicitly, on the branch — as the first step of `/bd-issue-pop` Phase 5, so it travels with the PR too.
 
 ## Task Priority
 
@@ -175,7 +175,7 @@ After completing work on a sub-issue, check whether all sub-issues have completi
    - Identify which use case(s) this epic contributes to
    - If all criteria are met, update road-map.yaml to mark the use case status as "done"
 4. **File follow-up issues** for any gaps via `gh issue create`
-5. **Execute the matching pop command's Phase 5** (`/gh-issue-pop` or, in beads mode, `/bd-issue-pop`) to open the PR
+5. **Execute the matching pop command's Phase 5 in full** (`/gh-issue-pop` or, in beads mode, `/bd-issue-pop`) — it opens the PR, merges it to `main`, and closes the epic (beads mode closes the parent bead on the branch first, so it merges too)
 
 ---
 
@@ -265,7 +265,7 @@ After completing work on a sub-issue, check whether all sub-issues have completi
 7. **Evaluate use case completion**:
    - Identify which use case(s) this epic contributes to
    - If all criteria are met, update road-map.yaml to mark the use case status as "done"
-8. **Execute the matching pop command's Phase 5** (`/gh-issue-pop` or, in beads mode, `/bd-issue-pop`) to open the PR
+8. **Execute the matching pop command's Phase 5 in full** (`/gh-issue-pop` or, in beads mode, `/bd-issue-pop`) — it opens the PR, merges it to `main`, and closes the epic (beads mode closes the parent bead on the branch first, so it merges too)
 9. **Summarize epic completion**: run `mage stats` and report what was built, total metrics, deviations, follow-up work, use case status
 
 ---
@@ -294,4 +294,4 @@ One worktree, one PR per epic. Every unit of work — every sub-issue or child b
 
 2. **All commits go to the shared worktree branch** (run `git add` and `git commit` from inside the worktree). Push after every commit. Do not branch per unit — the epic's children all land on this one branch and close via its single PR.
 
-3. **When no open unit remains** (open sub-issue count reaches 0, or `bd ready --label <id>` returns no child of this epic), execute the matching pop command's Phase 5 automatically.
+3. **When no open unit remains** (open sub-issue count reaches 0, or `bd ready --label <id>` returns no child of this epic), execute the matching pop command's Phase 5 automatically — it merges the PR to `main` and closes the epic. The last `do-work` pass finishes the epic end to end.
