@@ -2,8 +2,41 @@
 description: "I'm starting a new project and need you to help me create the initial documentation."
 ---
 
-Follow the workflow defined in `.claude/commands/bootstrap.md` in this
-repository. Read that file and execute its steps exactly — it is the
-canonical definition of the /bootstrap command; this prompt is a thin adapter
-so the command stays single-sourced. Treat any text after the prompt
-invocation as the command's arguments ($ARGUMENTS).
+Execute the /bootstrap command. The full workflow follows; treat any
+text after the prompt invocation as its arguments ($ARGUMENTS).
+
+# Command: Bootstrap Project
+
+I'm starting a new project and need you to help me create the initial documentation.
+
+First, read **docs/constitutions/design.yaml** to understand the documentation format rules for VISION and ARCHITECTURE documents.
+
+Then ask me questions to understand:
+1. What problem I'm trying to solve
+2. What the solution will do
+3. What success looks like
+4. What the major components are
+5. How those components fit together
+6. Key design decisions and why
+
+Based on my answers, write two documents:
+
+## VISION.yaml
+
+Capture the project's purpose, goals, and success criteria following the format rules in docs/constitutions/design.yaml.
+
+## ARCHITECTURE.yaml
+
+Capture the major components, their responsibilities, interfaces between them, and key design decisions following the format rules in docs/constitutions/design.yaml.
+
+Write both files to the `docs/` directory. Do not create any issues, epics, or tasks — documentation only.
+
+## Validation
+
+After writing the documents, run **`mage audit`** to check for broken references or missing fields.
+
+Fix any issues before finalizing.
+
+---
+
+Start by asking me questions to understand the project.
