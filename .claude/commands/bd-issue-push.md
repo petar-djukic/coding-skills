@@ -1,6 +1,6 @@
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
-Create a bead (task) in the current repository using beads (`bd`). The bead is committed and pushed so it is visible on all machines.
+Create a bead (task) in the current repository using beads (`bd`). Beads keeps its database in the main repo checkout and its tracked `issues.jsonl` on `main`; `bd sync` persists new beads to git so they are visible on all machines. Run this from the main checkout on `main` (not inside a worktree).
 
 ## Input
 
@@ -8,11 +8,10 @@ $ARGUMENTS
 
 ## Steps
 
-1. Verify that `.beads/` exists in the repository root. If not, initialize beads and commit:
+1. Verify that `.beads/` exists in the repository root. If not, initialize beads and persist it:
    ```bash
    bd init
-   git add .beads/
-   git commit -m "bd: initialize beads"
+   bd sync   # commits and pushes the tracked .beads/ files
    ```
 
 2. **Search for ripple effects.** Before drafting the bead, identify every file and field that the change touches — not just the primary target. The executor will do exactly what the bead says and nothing else, so anything omitted will be missed.
@@ -31,11 +30,11 @@ $ARGUMENTS
    ```
    Capture the bead ID from the output.
 
-5. Commit and push the `.beads/` changes so the bead is visible on all machines:
+5. Persist the new bead so it is visible on all machines:
    ```bash
-   git add .beads/
-   git commit -m "bd: create bead <id> — <title>"
-   git push
+   bd sync   # flushes the database to issues.jsonl and commits/pushes it
    ```
+   (`bd sync` is the beads-native way to persist the tracker; do not hand-commit
+   `.beads/` — confirm the subcommand with `bd sync --help`.)
 
 6. Report the bead ID and title.
