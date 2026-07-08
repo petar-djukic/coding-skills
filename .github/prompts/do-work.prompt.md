@@ -41,13 +41,19 @@ If this check fails, stop — report "call the matching pop command first" and d
   | Read a unit | `gh issue view <n> --json body` | `bd show <child-id>` |
   | Claim a unit | `gh issue edit <n> --add-assignee @me` | `bd update <child-id> --status in_progress` |
   | Log completion | `gh issue comment <n> …` | `bd comment <child-id> "Actual LOC: …"` |
-  | Close a unit | `Closes #<n>` in the commit (auto-close on merge) | `bd update <child-id> --status done`, then `git add .beads/ && commit && push` |
+  | Close a unit | `Closes #<n>` in the commit (auto-close on merge) | `bd update <child-id> --status done`, then `bd sync` (persists the tracker; never `git add .beads/` on the code branch) |
   | All units done → PR | `/gh-issue-pop` Phase 5 | `/bd-issue-pop` Phase 5 |
   | File follow-up | `gh issue create` | `bd create "<title>" --label <id>` |
 
   Confirm the exact `bd` flags with `bd ready --help` / `bd update --help` and use the installed forms. Everything else — how to write the doc or the code, the real-work bar, `mage stats`, the Stats block — is identical in both modes.
 
-  **Closing has no automatic path in beads.** gh mode relies on `Closes #<n>` in the commit to auto-close the sub-issue when the PR merges. Beads has no git-integrated auto-close: a `Closes …` line in a commit or PR body does nothing to a bead. So in beads mode you must close each child explicitly with `bd update <child-id> --status done` and commit the `.beads/` change to the worktree branch. That committed close travels with the PR and lands on `main` when it merges — the beads analogue of `Closes #` — while `bd ready` on the branch already sees the child closed, so the queue advances during `do-work`. Never rely on the merge to close a bead. The parent epic is closed the same way — explicitly, on the branch — as the first step of `/bd-issue-pop` Phase 5, so it travels with the PR too.
+  **Beads and worktrees — read this before running `bd` in the worktree.** Beads keeps one database (`.beads/beads.db`, gitignored) in the *main* repo checkout; only `issues.jsonl` is tracked. A git worktree does not have its own database — it uses a `.beads/redirect` file that points at the main repo's `.beads/`, so every worktree shares the one database. Beads creates that redirect automatically the first time you run `bd` inside a worktree; if a `bd` command in the worktree reports it cannot find the database, run `bd sync` (which sets up the redirect and rebuilds from `issues.jsonl`), or write the relative path to the main repo's `.beads/` into `.beads/redirect`.
+
+  Because of that, **bead state is tracker state, not PR payload.** It lives in the shared database and its `issues.jsonl`, which sits on `main` — it is not carried on the code branch and does not merge with the code PR. So in beads mode:
+  - close each child explicitly with `bd update <child-id> --status done`, then `bd sync` to persist the tracker to git (beads handles the `issues.jsonl` write and commit/push);
+  - **do not** `git add .beads/` on the code branch, and do not put a `Closes …` line in the commit for a bead — the code branch carries only code;
+  - `bd ready` reflects the close immediately (shared db), so the queue advances during `do-work`.
+  gh mode is different: there the `Closes #<n>` in the commit auto-closes the sub-issue at merge. Beads has no such auto-close — the merge closes nothing; `bd` + `bd sync` do.
 
 ## Task Priority
 
@@ -144,7 +150,7 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
    tokens: <count>"
    ```
 
-   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` and commit the `.beads/` change (a `Closes …` line would do nothing to a bead).
+   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` then `bd sync` (tracker state, persisted separately from the code branch — never `git add .beads/` here).
 
 5. **Commit** changes:
 
@@ -229,7 +235,7 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
    tokens: <count>"
    ```
 
-   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` and commit the `.beads/` change (a `Closes …` line would do nothing to a bead).
+   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` then `bd sync` (tracker state, persisted separately from the code branch — never `git add .beads/` here).
 
 4. **Commit** changes. **Commit message must mention which PRDs are implemented**:
 
@@ -273,7 +279,7 @@ After completing work on a sub-issue, check whether all sub-issues have completi
 
 ## Important Notes
 
-- Tracking is via `gh issue`/`gh api` in gh mode, or `bd` in beads mode (see the Tracker mode table) — commit and push `.beads/` after every bead status change so state is shared across machines
+- Tracking is via `gh issue`/`gh api` in gh mode, or `bd` in beads mode (see the Tracker mode table). In beads mode, persist tracker changes with `bd sync` (it writes and pushes `issues.jsonl` from the shared main-repo database); do not hand-commit `.beads/` on the code branch
 - Token usage goes in a completion comment: `gh issue comment` (gh) or `bd comment` (beads)
 - Follow-up work goes in a new unit: `gh issue create` (gh) or `bd create "<title>" --label <epic-id>` (beads)
 - Always run `mage stats` and include the full Stats block in commit messages
