@@ -1,6 +1,14 @@
 # coding-skills
 Skills for spec-driven development through GitHub issues and pull requests
 
+## Documentation
+
+These commands are documented in the following articles:
+
+- [Three Commands to a Crude Orchestrator](https://meshintelligence.substack.com/p/three-commands-to-a-crude-orchestrator) — `make-work`, `gh-issue-push`, `do-work`: the planning/execution split
+- [Two Claude Skills and a Worktree Rule](https://meshintelligence.substack.com/p/two-claude-skills-and-a-worktree) — `gh-issue-pop` and the worktree-per-issue rule
+- [How to Code with GLM 5.2 on OpenCode](https://meshintelligence.substack.com/p/how-to-glm-52-on-opencode) — running the full loop on OpenCode with a cheap model
+
 Experiment commands (`/exp-start`, `/exp-stop`) run local-only by default, or
 in a subtree-backed remote sync mode (`--remote <owner/repo>`) that keeps a
 two-way `git subtree` boundary with a second repository.
