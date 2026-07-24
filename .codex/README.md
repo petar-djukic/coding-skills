@@ -12,8 +12,9 @@ that all mirrors are current.
 - `AGENTS.md` — repository-wide instructions and rules for Codex.
 - `prompts/` — complete equivalents of the canonical command workflows,
   including `gh-issue-push` and `gh-issue-pop`.
-- `skills/` — reusable skills with canonical skill references rewritten
-  to stay inside this directory.
+- `skills/` — reusable skills and one Codex-discoverable command skill per
+  canonical command. All canonical skill references are rewritten to stay
+  inside this directory.
 - `pixi.toml`, `pixi.lock`, and `scripts/ensure-env.sh` — the portable Python
   environment used by skills that run scripts.
 
