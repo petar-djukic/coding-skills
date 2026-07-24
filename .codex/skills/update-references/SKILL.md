@@ -230,7 +230,7 @@ $RUN <skill>/scripts/scholar.py --db <db-path> search \
 The Scholar script uses the same `references.yaml` database and the same
 deduplication logic. It requires a SerpAPI key — use the same key as the
 `idea-factory` job-search skill (stored in
-`idea-factory/.github/skills/job-search/SKILL.md`). Set it via
+`idea-factory/.codex/skills/job-search/SKILL.md`). Set it via
 `--api-key <key>` or the `SERPAPI_KEY` environment variable.
 
 #### Semantic Scholar search
