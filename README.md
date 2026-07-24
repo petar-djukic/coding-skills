@@ -17,7 +17,8 @@ Assistant configuration is canonical under `.claude/` and mirrored to
 `.cursor/` (commands and skills), `.opencode/` (commands and skills),
 `.codex/` (repository instructions, prompts, and skills), and `.github/`.
 The `.codex/` mirror provides a self-contained `AGENTS.md`, complete command
-workflows under `prompts/`, and skills whose internal paths stay under
+workflows under `prompts/`, and a Codex-discoverable `SKILL.md` wrapper for
+every command alongside the reusable skills. All internal paths stay under
 `.codex/skills/`; the generated root `AGENTS.md` makes the same instructions
 discoverable by Codex in this repository. The `.github/` mirror is self-contained: each prompt inlines
 the full command workflow, `copilot-instructions.md` inlines the agent
