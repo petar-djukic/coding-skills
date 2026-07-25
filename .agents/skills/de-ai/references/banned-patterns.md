@@ -356,7 +356,7 @@ quickly.
 ## Keeping the List in Sync
 
 The lexical list must track the house style rules (e.g. idea-factory's
-`.codex/rules/substack-writing.md`). When a rules doc bans a phrase family,
+`substack-writing.md`). When a rules doc bans a phrase family,
 add it to `AI_PHRASES` in the same change — GH-46 was the drift case: six
 rules-banned families (worth-tics, question-is, here's-the-thing, move the
 needle, here's-what-I-learned, best practices) passed the scan for months.

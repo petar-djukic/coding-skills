@@ -97,19 +97,19 @@ For each resolved citation, get the paper text:
 
 2. **Has arxiv_id?** Fetch via the sibling skill's script:
    ```bash
-   $RUN .codex/skills/update-references/scripts/arxiv.py \
+   $RUN .agents/skills/update-references/scripts/arxiv.py \
      --db <db-path> fetch --id <arxiv_id>
    ```
    Then read the markdown conversion it produces.
 
 3. **No arxiv_id?** Search Google Scholar for the title:
    ```bash
-   $RUN .codex/skills/update-references/scripts/scholar.py \
+   $RUN .agents/skills/update-references/scripts/scholar.py \
      --db <db-path> search --query "<paper title>" --max 3
    ```
    If a match is found with a PDF link, fetch it:
    ```bash
-   $RUN .codex/skills/update-references/scripts/scholar.py \
+   $RUN .agents/skills/update-references/scripts/scholar.py \
      --db <db-path> fetch --title "<title>" --url "<pdf_url>" \
      --authors "Given Family" --year YYYY
    ```

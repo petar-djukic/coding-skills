@@ -15,12 +15,14 @@ two-way `git subtree` boundary with a second repository.
 
 Assistant configuration is canonical under `.claude/` and mirrored to
 `.cursor/` (commands and skills), `.opencode/` (commands and skills),
-`.codex/` (repository instructions, prompts, and skills), and `.github/`.
-The `.codex/` mirror provides a self-contained `AGENTS.md`, complete command
-workflows under `prompts/`, and a Codex-discoverable `SKILL.md` wrapper for
-every command alongside the reusable skills. All internal paths stay under
-`.codex/skills/`; the generated root `AGENTS.md` makes the same instructions
-discoverable by Codex in this repository. The `.github/` mirror is self-contained: each prompt inlines
+`.agents/skills/` with a root `AGENTS.md` (Codex), and `.github/`.
+Codex reads repository guidance from `AGENTS.md` and discovers skills from
+`.agents/skills/`, so those are the only Codex surfaces generated: every
+canonical command becomes a command skill carrying its complete workflow,
+alongside the reusable skills, with internal paths rewritten to stay under
+`.agents/skills/`. `AGENTS.md` stays short on purpose — the mandatory
+issue/worktree/PR workflow and pointers to the canonical rule files, rather
+than a copy of them. The `.github/` mirror is self-contained: each prompt inlines
 the full command workflow, `copilot-instructions.md` inlines the agent
 instructions and rules, and the skills are copied under `.github/skills/`
 with every path reference rewritten to stay inside the subtree. Nothing
