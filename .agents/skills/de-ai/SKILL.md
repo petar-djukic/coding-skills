@@ -51,7 +51,7 @@ Run Prompt 0 from [perplexity-prompts.md](./references/perplexity-prompts.md) on
 Run the lexical detection script to find banned words, AI clichés, false emphasis, narrative-pivot frames, and mechanical transitions:
 
 ```bash
-bash .codex/skills/de-ai/scripts/detect-lexical.sh <file-or-dir> [file-or-dir ...]
+bash .agents/skills/de-ai/scripts/detect-lexical.sh <file-or-dir> [file-or-dir ...]
 ```
 
 Accepts a single file, multiple files, or directories (scans `*.md` recursively).
@@ -75,7 +75,7 @@ Candidates do not fail the scan. Instead, carry them forward to Step 3 (semantic
 Run the structural detection script to measure burstiness, parallelism, paragraph uniformity, and density metrics:
 
 ```bash
-python3 .codex/skills/de-ai/scripts/detect-structural.py <file-or-dir> [file-or-dir ...]
+python3 .agents/skills/de-ai/scripts/detect-structural.py <file-or-dir> [file-or-dir ...]
 ```
 
 Accepts a single file, multiple files, or directories (scans `*.md` recursively).
@@ -96,8 +96,8 @@ Review the metrics output. Key signals:
 **Voice distance (positive check — catches unnamed tells).** When a voice corpus exists — a `references.yaml` with summarized papers at or above the working directory, or one the user names — build/refresh the profile and pass it to the scan:
 
 ```bash
-python3 .codex/skills/match-voice/scripts/style.py --db <db> corpus   # writes voice-profile.json
-python3 .codex/skills/de-ai/scripts/detect-structural.py <files> --voice-profile=<db-dir>/voice-profile.json
+python3 .agents/skills/match-voice/scripts/style.py --db <db> corpus   # writes voice-profile.json
+python3 .agents/skills/de-ai/scripts/detect-structural.py <files> --voice-profile=<db-dir>/voice-profile.json
 ```
 
 The named detectors are a denylist — a tell must be known to be caught. Distance from the target corpus is the complement: a new wrinkle is a deviation from human-corpus statistics whether or not anyone has named it yet. The `voice_distance` block reports z-scores for the rhythm metrics; for the full comparison (passive/hedges/citations/vocabulary), run `style.py --db <db> compare <draft>`. **Verdict rule: a document that passes every named check but sits far from the corpus profile (any |z| ≥ 2) is NOT clean** — report "passes named checks; voice-distance high" and route to Step 3 with the deviating metrics (and their direction) as seeds. No corpus available → skip this check with a one-line note; everything else behaves as before.
@@ -141,7 +141,7 @@ Freeform summaries without these elements are not a valid Step 3 output.
 For each flagged passage (in priority order from Prompt 5):
 
 1. Load the [rewrite instructions](./references/rewrite-instructions.md)
-2. Load the project's voice reference for this document type, if one exists — for example a `.codex/rules/<voice>.md` file the project provides (per-format voice guides are common: one for articles, one for long-form, etc.). If the project defines none, infer the target voice from existing published work in the same venue. Do not assume any specific file name.
+2. Load the project's voice reference for this document type, if one exists — for example a `<voice>.md` file the project provides (per-format voice guides are common: one for articles, one for long-form, etc.). If the project defines none, infer the target voice from existing published work in the same venue. Do not assume any specific file name.
 3. For CoT leaks: remove the flagged sentence and re-read the paragraph. If no information is lost, the sentence is a true CoT leak — delete it. If information is lost, the sentence uses CoT-style wording on real content — reword to remove the scaffolding phrase while preserving the content.
 4. Rewrite ONLY the flagged passage using the rewrite prompt template
 5. Constraints: preserve meaning, match author voice, don't introduce new AI patterns
@@ -214,7 +214,7 @@ run encounters one. Standards: `references/abstract-standards.md`.
 
 1. Mechanical checks:
    ```bash
-   python3 .codex/skills/de-ai/scripts/abstract-check.py <paper.md> \
+   python3 .agents/skills/de-ai/scripts/abstract-check.py <paper.md> \
      --body <results.md> <other-chapters.md...> --limit 200
    ```
    Locates the abstract (LaTeX environment, front matter, heading, or
@@ -270,8 +270,8 @@ failed phrasing). Then verify: abstract-check.py traceability must pass
 For in-progress drafts where you want a fast surface-pass without burning model calls:
 
 ```bash
-bash .codex/skills/de-ai/scripts/detect-lexical.sh <file-or-dir>
-python3 .codex/skills/de-ai/scripts/detect-structural.py <file-or-dir> --json
+bash .agents/skills/de-ai/scripts/detect-lexical.sh <file-or-dir>
+python3 .agents/skills/de-ai/scripts/detect-structural.py <file-or-dir> --json
 ```
 
 Quick Mode is for working drafts. It is **not** valid for a publication verdict. Quick Mode catches the surface-detectable patterns. The rhetorical patterns that account for most of the AI signal are invisible to the scripts and require Step 3. Do not report a verdict based on Quick Mode output alone.

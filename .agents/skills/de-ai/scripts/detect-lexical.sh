@@ -153,7 +153,7 @@ AI_PHRASES=(
   "this brings us to"
   # question-is tic ("the question is", "the real question is", "the only question is")
   " question is"
-  # substack-writing rules sync (GH-46) — see idea-factory .codex/rules/substack-writing.md
+  # substack-writing rules sync (GH-46) — see idea-factory substack-writing.md
   "here's the thing"
   "here is the thing"
   "move the needle"
