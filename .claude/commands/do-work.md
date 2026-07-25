@@ -244,6 +244,25 @@ When the prose has to stop sounding model-written and rewriting it yourself is
 not getting there, hand the passage to the `voice-rewrite` skill, which sends
 it to a different model family with the same anchors and gates the result.
 
+### 3. External check (optional, usually skipped)
+
+de-ai is a denylist you have just been writing against, so its silence is weak
+evidence that the prose reads as human. An external detector is independent of
+it. Most repositories will not have one configured:
+
+```bash
+python3 <de-ai>/scripts/pangram.py --check
+```
+
+If that reports no key, **skip it and move on.** That is the normal state, not
+a degraded one, and it never blocks committing prose.
+
+If a key is present, it still is not permission. The check uploads the document
+to a third party that retains it, so ask the user about this specific file
+first — every time, per the upload rule in the `writing-voice/` directory rule.
+Do not shortcut that because a key happens to be set, and do not upload a draft
+under embargo or NDA without raising it.
+
 ---
 
 ## Code Workflow
