@@ -153,6 +153,12 @@ it detects beads mode, picks the next ready child of this epic
 and closes it with `bd update --status done` (which unblocks its dependents).
 Repeat until no child of this epic is ready.
 
+`/do-work` routes each child by deliverable: documentation, prose, or code. A
+child whose output is prose a person reads — a paper section, a README, a post
+— takes the Prose workflow, which learns the repository's voice from
+`writing-voice/` before drafting and scans the result with de-ai. Nothing
+changes in a repository without that directory.
+
 One worktree, one PR per epic: every child lands on this one branch; `/do-work`
 never creates a branch or worktree per child. If a child turns out too big,
 `/do-work` splits it into sibling children under this epic (same worktree) — it
