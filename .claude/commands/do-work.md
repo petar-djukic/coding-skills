@@ -2,7 +2,7 @@
 
 # Command: Do Work
 
-Pick **one** of the two workflows below depending on the deliverable type. Use **Documentation workflow** for docs under `docs/`, **Code workflow** for implementation under `pkg/`, `internal/`, `cmd/`.
+Pick **one** of the three workflows below depending on the deliverable type. Use **Documentation workflow** for YAML docs under `docs/`, **Prose workflow** for writing a person reads start to finish (paper sections, README, posts), **Code workflow** for implementation under `pkg/`, `internal/`, `cmd/`.
 
 ## Precondition — run inside a worktree
 
@@ -91,7 +91,12 @@ The steps below show gh mode; in beads mode substitute the beads operations from
 | Deliverable      | Workflow                                                  | Indicators                                                                                                                          |
 |------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | **Documentation** | [Documentation Workflow](#documentation-workflow)         | Output path under `docs/`; has "Required sections", "Format rule", or doc format name                                             |
+| **Prose**         | [Prose Workflow](#prose-workflow)                          | Output is continuous English a person reads start to finish: paper or article sections, README, blog post, design narrative. Markdown or LaTeX, not a YAML schema |
 | **Code**          | [Code Workflow](#code-workflow)                           | Output under `pkg/`, `internal/`, `cmd/`; has Requirements, Design Decisions, Acceptance Criteria with tests or observable behaviour |
+
+Documentation and Prose split on whether the output has a voice. A PRD fills in
+a schema and is read by field; a paper section is read as writing, and how it
+sounds is part of whether it is right.
 
 ---
 
@@ -178,6 +183,66 @@ After completing work on a sub-issue, check whether all sub-issues have completi
    - If all criteria are met, update road-map.yaml to mark the use case status as "done"
 4. **File follow-up issues** for any gaps via `gh issue create`
 5. **Execute the matching pop command's Phase 5 in full** (`/gh-issue-pop` or, in beads mode, `/bd-issue-pop`) — it opens the PR, merges it to `main`, and closes the epic (beads mode closes the parent bead on the branch first, so it merges too)
+
+---
+
+## Prose Workflow
+
+Use this workflow when the deliverable is **prose a person reads**: a paper or
+article section, a README, a design narrative, a post. Not YAML specs — those
+are the Documentation workflow.
+
+Task selection, the completion comment with `Actual LOC`, the commit and Stats
+block, and the last-unit Phase 5 handoff are all identical to the Documentation
+workflow. Only the writing differs, and only in two ways.
+
+### 1. Learn the voice before drafting
+
+Walk up from the output file's directory to the repository root looking for a
+`writing-voice/` directory. If there is none, write to the repo's documentation
+standards and skip the rest of this step — nothing changes.
+
+If it exists, read it before writing a word:
+
+```bash
+python3 <de-ai>/scripts/voice_anchors.py discover <output-file>
+python3 <de-ai>/scripts/voice_anchors.py anchors --text <passage-file>|- --for <output-file> -k 3
+```
+
+(`<de-ai>` is the de-ai skill directory on whichever agent surface is in use;
+commands do not hardcode a surface path. `--text` reads a *file* or stdin, not
+a literal passage — pipe the draft passage in with `-`.)
+
+Read `manifest.yaml` and pick the two or three samples nearest this deliverable
+in topic and register, preferring `author-voice` over `venue-voice` and
+weighting the `notes` field — it records what each sample is good for. Match
+their register: sentence rhythm, how much hedging, how claims get made, whether
+the prose explains or asserts. The full contract is the
+`writing-voice/` directory rule in this repository's rules.
+
+Doing this first matters more than it looks. A draft written without a target
+register and then corrected toward one keeps its original skeleton and reads
+like a translation. The samples are cheap to read and expensive to retrofit.
+
+### 2. Scan the prose before committing
+
+Prose written by a model is the input the `de-ai` detectors exist for, so run
+them on your own output rather than shipping it unchecked:
+
+```bash
+bash <de-ai>/scripts/detect-lexical.sh <output-file>
+python3 <de-ai>/scripts/detect-structural.py <output-file>
+```
+
+With a `writing-voice/` directory present, add `--voice-profile` to report
+distance from the author's baseline instead of only against fixed thresholds
+(see the de-ai SKILL.md). Fix what fires. A flag is a prompt to look, not a
+verdict — a term of art that trips the lexical scan stays, and you say so in
+the completion comment rather than damaging the sentence to silence a grep.
+
+When the prose has to stop sounding model-written and rewriting it yourself is
+not getting there, hand the passage to the `voice-rewrite` skill, which sends
+it to a different model family with the same anchors and gates the result.
 
 ---
 
