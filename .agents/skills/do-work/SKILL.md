@@ -205,70 +205,45 @@ workflow. Only the writing differs, and only in two ways.
 
 ### 1. Learn the voice before drafting
 
-Walk up from the output file's directory to the repository root looking for a
-`writing-voice/` directory. If there is none, write to the repo's documentation
-standards and skip the rest of this step — nothing changes.
+If the repository carries a `writing-voice/` directory (the discovery rule
+walks up from the output file), **invoke the `match-structure` skill** to
+retrieve the exemplars nearest this deliverable in topic and register, and
+match what they do: sentence rhythm, how much hedging, how claims get made,
+whether the prose explains or asserts. No `writing-voice/`, no change — write
+to the repo's documentation standards.
 
-If it exists, read it before writing a word:
-
-```bash
-python3 <filter-tells>/scripts/voice_anchors.py discover <output-file>
-python3 <filter-tells>/scripts/voice_anchors.py anchors --text <passage-file>|- --for <output-file> -k 3
-```
-
-(`<filter-tells>` is the filter-tells skill directory on whichever agent surface is in use;
-commands do not hardcode a surface path. `--text` reads a *file* or stdin, not
-a literal passage — pipe the draft passage in with `-`.)
-
-Read `manifest.yaml` and pick the two or three samples nearest this deliverable
-in topic and register, preferring `author-voice` over `venue-voice` and
-weighting the `notes` field — it records what each sample is good for. Match
-their register: sentence rhythm, how much hedging, how claims get made, whether
-the prose explains or asserts. The full contract is the
-`writing-voice/` directory rule in this repository's rules.
-
-Doing this first matters more than it looks. A draft written without a target
-register and then corrected toward one keeps its original skeleton and reads
-like a translation. The samples are cheap to read and expensive to retrofit.
+Do this before drafting, not after. A draft written without a target register
+and then corrected toward one keeps its original skeleton and reads like a
+translation. The samples are cheap to read and expensive to retrofit.
 
 ### 2. Scan the prose before committing
 
-Prose written by a model is the input the `filter-tells` detectors exist for, so run
-them on your own output rather than shipping it unchecked:
+**Invoke the `filter-tells` skill** on your own output. Prose written by a
+model is exactly what its detectors exist for, and shipping unchecked because
+you wrote it yourself is the failure mode.
 
-```bash
-bash <filter-tells>/scripts/detect-lexical.sh <output-file>
-python3 <filter-tells>/scripts/detect-structural.py <output-file>
-```
-
-With a `writing-voice/` directory present, add `--voice-profile` to report
-distance from the author's baseline instead of only against fixed thresholds
-(see the filter-tells SKILL.md). Fix what fires. A flag is a prompt to look, not a
-verdict — a term of art that trips the lexical scan stays, and you say so in
-the completion comment rather than damaging the sentence to silence a grep.
+Fix what fires. A flag is a prompt to look, not a verdict — a term of art that
+trips the lexical scan stays, and you say so in the completion comment rather
+than damaging the sentence to silence a grep.
 
 When the prose has to stop sounding model-written and rewriting it yourself is
-not getting there, hand the passage to the `match-voice` skill, which sends
-it to a different model family with the same anchors and gates the result.
+not getting there, **invoke `match-voice`**: it sends the passage to a
+different model family with the same anchors and gates the result.
 
 ### 3. External check (optional, usually skipped)
 
-filter-tells is a denylist you have just been writing against, so its silence is weak
-evidence that the prose reads as human. An external detector is independent of
-it. Most repositories will not have one configured:
+`filter-tells` is a denylist you have just been writing against, so its silence
+is weak evidence that the prose reads as human. Its external-detector step is
+independent of that, and most repositories will not have it configured — no
+key means **skip it and move on**, which is the normal state, not a degraded
+one, and it never blocks committing prose.
 
-```bash
-python3 <filter-tells>/scripts/pangram.py --check
-```
+If a key is present, it still is not permission: the check uploads the document
+to a third party that retains it. Ask about this specific file first, every
+time, per the upload rule in the `writing-voice/` directory rule.
 
-If that reports no key, **skip it and move on.** That is the normal state, not
-a degraded one, and it never blocks committing prose.
-
-If a key is present, it still is not permission. The check uploads the document
-to a third party that retains it, so ask the user about this specific file
-first — every time, per the upload rule in the `writing-voice/` directory rule.
-Do not shortcut that because a key happens to be set, and do not upload a draft
-under embargo or NDA without raising it.
+Each skill owns its own invocation details. Naming their scripts here is how a
+rename turns into an eight-file edit.
 
 ---
 
