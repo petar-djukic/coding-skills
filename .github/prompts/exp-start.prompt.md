@@ -30,56 +30,31 @@ The slug is kebab-case (e.g. `transformer-perf`). `--remote` accepts a full Git 
    ```
    If not on `main`, warn the user and stop. Experiment branches are created from the main repo only.
 
-## Phase 2 -- Create or Join
+## Phase 2 -- Create or join
 
-1. Fetch from origin:
-   ```bash
-   git fetch origin
-   ```
+```bash
+git fetch origin
+git ls-remote --heads origin exp/<slug>     # does it already exist?
+```
 
-2. Check whether `origin/exp/<slug>` already exists:
-   ```bash
-   git ls-remote --heads origin exp/<slug>
-   ```
+**Join** (the branch exists): `git worktree add ../exp-<slug> exp/<slug>`. If
+the worktree holds `.exp-sync.yaml`, it is remote-backed — read it and rebuild
+the sync remote on this machine from its `remote_name` and `remote_url`
+(Phase 3 step 2). Report the join and print the Phase 4 sync commands.
 
-### If the remote branch exists (join)
+**Create** (it does not): branch, init beads, commit the marker.
 
-3a. Create a worktree tracking the branch:
-   ```bash
-   git worktree add ../exp-<slug> exp/<slug>
-   ```
+```bash
+git worktree add ../exp-<slug> -b exp/<slug>
+cd ../exp-<slug>
+bd init
+git add -A
+git commit -m "exp/<slug>: initialize experiment
 
-4a. If the worktree contains `.exp-sync.yaml`, this is a remote-backed experiment: read it and reconstruct the sync remote on this machine (Phase 3 step 2, using the file's `remote_name` and `remote_url`). Report that you joined an existing experiment and print the sync commands from Phase 4.
-
-### If the remote branch does not exist (create)
-
-3b. Create a worktree with a new branch:
-   ```bash
-   git worktree add ../exp-<slug> -b exp/<slug>
-   ```
-
-4b. Initialize beads inside the worktree:
-   ```bash
-   cd ../exp-<slug>
-   bd init
-   ```
-
-5b. Commit the initial state:
-   ```bash
-   cd ../exp-<slug>
-   git add -A
-   git commit -m "exp/<slug>: initialize experiment
-
-   Skill: exp-start
-   Called-by: user"
-   ```
-
-6b. Push the branch:
-   ```bash
-   git push -u origin exp/<slug>
-   ```
-
-If `--remote` was given, continue to Phase 3. Otherwise skip to Phase 5.
+Skill: exp-start
+Called-by: <invoking skill, or 'user'>"
+git push -u origin exp/<slug>
+```
 
 ## Phase 3 -- Remote-Backed Setup (only with --remote)
 
