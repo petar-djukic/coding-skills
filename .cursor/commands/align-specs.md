@@ -54,4 +54,4 @@ git add -A
 git commit -m "Align specifications to design constitution"
 ```
 
-Report: how many files were modified, what structural changes were made, and any TODOs that require human input.
+Report: how many files changed, what structural edits you made, and any TODOs that require human input.
