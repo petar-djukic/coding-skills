@@ -1,60 +1,48 @@
 ---
-description: "Pop a bead (epic) into a worktree branch and decompose it into child beads, then hand off to `/do-work` — mirroring the gh flow (`gh-issue-pop` sets"
+description: "Pop a bead (epic) into a worktree branch, decompose it into child beads, then"
 ---
 
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
-Pop a bead (epic) into a worktree branch and decompose it into child beads, then hand off to `/do-work` — mirroring the gh flow (`gh-issue-pop` sets up; `/do-work` does the work). Uses beads (`bd`) for task tracking and git for branch management. Every status change is committed and pushed so state is shared across machines.
+Pop a bead (epic) into a worktree branch, decompose it into child beads, then
+hand off to `/do-work`. Mirrors the gh flow: this command sets up, `/do-work`
+does the work, and its last pass merges the PR and closes the epic.
 
-The division of labor matches `gh-issue-pop`: this command syncs, fetches the bead, gathers context, proposes the breakdown (the single interactive pause), and sets up the worktree plus the child-bead graph — then stops. `/do-work`, run repeatedly, works one ready child per pass on the shared worktree branch until all are done; the last pass merges the code PR to `main` and closes the epic automatically. Two separate stores: all the epic's *code* lands on the one `bd-<id>-<slug>` branch and merges via its single PR, while the *bead tracker* lives in the shared main-repo database (worktrees share it through a `.beads/redirect`) and is persisted with `bd sync` — bead status is never carried on the code branch.
+Two stores, and keeping them separate matters. The epic's **code** lands on the
+one `bd-<id>-<slug>` branch and merges via its single PR. The **bead tracker**
+lives in the shared main-repo database — worktrees reach it through a
+`.beads/redirect` — and persists with `bd sync`. Bead status never rides the
+code branch.
 
 ## Input
 
 $ARGUMENTS
 
-If arguments contain a bead ID, use that bead. If no ID is given, run `bd list` and ask the user to pick one.
+A bead ID. Without one, run `bd list` and ask which.
 
-## Phase 0 -- Sync and Validate
+## Phase 0-2 -- Sync, fetch, gather context
 
-1. Detect the repo (used for the PR commands in Phase 5):
-   ```bash
-   gh repo view --json nameWithOwner -q .nameWithOwner
-   ```
-   Use the result as `<owner>/<repo>` throughout.
+```bash
+gh repo view --json nameWithOwner -q .nameWithOwner   # <owner>/<repo>, for Phase 5
+git pull && bd sync
+git branch --show-current                             # must be main, not a worktree
+bd show <id>
+```
 
-2. Pull the latest state and sync beads:
-   ```bash
-   git pull
-   bd sync
-   ```
+Stop if you are not on `main` in the main checkout, or if the bead is already
+done. Show the bead's title and description.
 
-3. Confirm we are in the main repo directory on `main`, not inside a worktree:
-   ```bash
-   git branch --show-current
-   ```
-   If not on `main`, warn and stop.
+Read `docs/VISION.yaml`, `docs/ARCHITECTURE.yaml`, `docs/road-map.yaml`,
+`docs/constitutions/design.yaml` where they exist, plus the READMEs relevant to
+the bead. Probe the build tool once — its output gates every later mage step,
+and a repo without mage skips them silently:
 
-## Phase 1 -- Fetch the Bead
+```bash
+mage -l 2>/dev/null || true
+```
 
-1. Fetch the bead details:
-   ```bash
-   bd show <id>
-   ```
-2. If the bead is already done, stop and report its state.
-3. Display the bead title and description to the user.
-
-## Phase 2 -- Gather Project Context
-
-1. Read docs/VISION.yaml, docs/ARCHITECTURE.yaml, docs/road-map.yaml, and `docs/constitutions/design.yaml` if they exist.
-2. Read READMEs for product requirements and use cases relevant to the bead.
-3. Probe available mage targets (the result gates all subsequent mage steps):
-   ```bash
-   mage -l 2>/dev/null || true
-   ```
-   Record which targets exist. If `mage` is not installed or the repo has no Magefile, treat all mage targets as absent and skip mage-dependent steps silently.
-4. If the probe shows a consistency-check target — commonly `audit` or `analyze` — run it (`mage audit` or `mage analyze`). Otherwise skip.
-5. If `stats` appeared in the probe, run `mage stats`. Otherwise skip.
-6. Summarize the current project state.
+Run the consistency check if one exists (`mage audit`, or `mage analyze` where
+it is named that way) and `mage stats` if present. Summarize the project state.
 
 ## Phase 3 -- Propose Breakdown
 
@@ -76,96 +64,66 @@ interactive pause. Do not create any beads until the user agrees.
 If the natural breakdown is a single unit of work, say so — no child beads are
 created; the parent bead is worked directly (the single-unit path in Phase 4).
 
-## Phase 4 -- Create Worktree and Start Work
+## Phase 4 -- Create the worktree and the bead graph
 
-After user approval:
+After approval, slug the title (kebab-case, ≤30 chars) and set up:
 
-1. Derive a slug from the bead title (kebab-case, max 30 chars).
+```bash
+git worktree add ../bd-<id>-<slug> -b bd-<id>-<slug>
+cd ../bd-<id>-<slug>
+bd sync                                  # writes the worktree redirect, rebuilds from issues.jsonl
+bd update <id> --status in_progress && bd sync
+```
 
-2. Create a git worktree with a new branch, and enter it:
-   ```bash
-   git worktree add ../bd-<id>-<slug> -b bd-<id>-<slug>
-   cd ../bd-<id>-<slug>
-   ```
-   The code work happens inside this worktree. The bead tracker is separate —
-   see the note on beads and worktrees below.
+`bd sync` is what wires beads to the worktree: one database lives in the main
+checkout, and the worktree reaches it through a local `.beads/redirect`. If
+`bd` still cannot find it, write the relative path to the main repo's
+`.beads/` into that file — it is gitignored, never commit it.
 
-3. Wire beads to the worktree. Beads keeps one database in the *main* repo
-   checkout (`.beads/beads.db`, gitignored); a worktree shares it through a
-   local `.beads/redirect` file. Running `bd` in the worktree creates that
-   redirect automatically; `bd sync` forces it and rebuilds from the tracked
-   `issues.jsonl`:
-   ```bash
-   bd sync   # sets up the worktree redirect to the main repo's .beads/ and syncs
-   ```
-   If `bd` still cannot find the database, write the relative path to the main
-   repo's `.beads/` into `.beads/redirect` (it is local and gitignored — never
-   commit it).
+Every `bd` change is tracker state in the shared database. Persist with
+`bd sync`, which writes and pushes `issues.jsonl`; never `git add .beads/` on
+the code branch.
 
-4. Mark the epic in_progress. Bead status is tracker state in the shared
-   database, not on the code branch — persist it with `bd sync` (which writes
-   and pushes `issues.jsonl`), never `git add .beads/` on the branch:
-   ```bash
-   bd update <id> --status in_progress
-   bd sync
-   ```
+For a multi-child breakdown, create each child **labelled with the parent id**
+— that label is what scopes `/do-work`'s ready queue to this epic — then wire
+the dependency edges so the parent stays blocked until its children finish:
 
-5. Create the child beads (multi-child breakdown only). For each approved
-   child, create a bead **labelled with the parent id**, capture its id, add its
-   dependency edges, and link it under the parent so the parent is blocked until
-   its children complete; then persist with `bd sync`:
-   ```bash
-   bd create "<child title>" --label <id>     # label = parent id; capture <child-id>
-   bd dep add <child-id> <prereq-child-id>    # one per prerequisite
-   bd dep add <id> <child-id>                 # parent depends on the child
-   bd sync
-   ```
-   The label ties each child to this parent so `/do-work` can scope the ready
-   queue to them (`bd ready` is global — see "Working the epic"). The exact flags
-   for the label, dependencies, and sync vary by `bd` version — confirm with
-   `bd create --help` / `bd dep --help` / `bd sync --help` and use the installed
-   forms. Keep the list of child ids you created; it is the fallback scope if the
-   installed `bd` cannot filter `bd ready` by label. For a single-unit breakdown,
-   skip this step — there are no children and the parent bead is the unit of work.
+```bash
+bd create "<child title>" --label <id>     # capture <child-id>
+bd dep add <child-id> <prereq-child-id>    # one per prerequisite
+bd dep add <id> <child-id>                 # parent depends on the child
+bd sync
+```
 
-6. Commit an initial (code) marker on the worktree branch and push it:
-   ```bash
-   git commit --allow-empty -m "Pop bd-<id>: <title> into worktree
+For a single-unit breakdown, create no children; `/do-work` works the parent
+bead directly.
 
-   Skill: bd-issue-pop
-   Called-by: user"
-   git push -u origin bd-<id>-<slug>
-   ```
+Commit the marker on the branch and push:
 
-7. Report the worktree path and the child beads created. The work is done by
-   `/do-work`, not here — hand off to it now (next section).
+```bash
+git commit --allow-empty -m "Pop <id>: <title> into worktree
+
+Children: <child ids>          # omit when there are none
+
+Skill: bd-issue-pop
+Called-by: <invoking skill, or 'user'>"
+git push -u origin bd-<id>-<slug>
+```
 
 ## Working the epic — run `/do-work` repeatedly
 
-Popping set up the worktree and the child-bead graph; `/do-work` does the work,
-exactly as in the gh flow. Run `/do-work` inside the worktree, once per pass —
-it detects beads mode, picks the next ready child of this epic
-(`bd ready --label <id>`, the parent-scoped queue), implements it on the shared
-`bd-<id>-<slug>` branch under the real-work bar (no stubs), records `Actual LOC`,
-and closes it with `bd update --status done` (which unblocks its dependents).
-Repeat until no child of this epic is ready.
+Popping built the worktree and the bead graph; `/do-work` does the work, one
+ready child per pass, on the shared branch. It detects beads mode, takes the
+next child from the parent-scoped queue (`bd ready --label <id>`), implements
+it under the real-work bar (no stubs), records `Actual LOC`, and closes it with
+`bd update --status done`, which unblocks its dependents.
 
-`/do-work` routes each child by deliverable: documentation, prose, or code. A
-child whose output is prose a person reads — a paper section, a README, a post
-— takes the Prose workflow, which learns the repository's voice from
-`writing-voice/` before drafting and scans the result with filter-tells. Nothing
-changes in a repository without that directory.
+**Only ever implement beads belonging to this epic** — never one from another
+epic that happens to be ready.
 
-One worktree, one PR per epic: every child lands on this one branch; `/do-work`
-never creates a branch or worktree per child. If a child turns out too big,
-`/do-work` splits it into sibling children under this epic (same worktree) — it
-does not pop again. When the last child closes, `/do-work` runs Phase 5
-automatically — it merges the PR to `main`, closes the epic, and cleans up. For
-a single-unit breakdown (no children), `/do-work` works the parent bead
-directly, then runs Phase 5 the same way.
-
-The invariant holds throughout: only ever implement beads that belong to this
-epic — never a bead from another epic that happens to be ready.
+One worktree, one PR per epic. A child too big to finish gets split into
+siblings under this epic in the same worktree; `/do-work` never pops again.
+When the last child closes, `/do-work` runs Phase 5 automatically.
 
 ## Phase 5 -- Merge and Close the Epic
 

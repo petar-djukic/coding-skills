@@ -26,7 +26,7 @@ Capture the project's purpose, goals, and success criteria following the format 
 
 ## ARCHITECTURE.yaml
 
-Capture the major components, their responsibilities, interfaces between them, and key design decisions following the format rules in docs/constitutions/design.yaml.
+Capture the major components, their responsibilities, the interfaces between them, and the design decisions that constrain them, following the format rules in docs/constitutions/design.yaml.
 
 Write both files to the `docs/` directory. Do not create any issues, epics, or tasks — documentation only.
 

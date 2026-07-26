@@ -15,7 +15,7 @@ $ARGUMENTS
 
 1. Detect the repo: run `gh repo view --json nameWithOwner -q .nameWithOwner` and use the result as `<owner>/<repo>` for all `gh` commands.
 2. Determine type from the input: keywords like "bug", "fix", "broken", "crash" → bug; otherwise → enhancement.
-3. **Search for ripple effects.** Before drafting the issue, identify every file and field that the change touches — not just the primary target. The executor will do exactly what the issue says and nothing else, so anything omitted will be missed.
+3. **Trace what the change touches.** Before drafting, identify every file and field affected — not just the primary target. The executor will do exactly what the issue says and nothing else, so anything omitted will be missed.
    - Read the files involved to understand their structure.
    - `grep` for identifiers, names, or values being added, changed, renamed, or deleted. Search the full project, not just the obvious files.
    - For each hit, note the file path, the field or line, and what needs to change.
