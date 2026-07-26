@@ -153,7 +153,7 @@ Repeat until no child of this epic is ready.
 `/do-work` routes each child by deliverable: documentation, prose, or code. A
 child whose output is prose a person reads — a paper section, a README, a post
 — takes the Prose workflow, which learns the repository's voice from
-`writing-voice/` before drafting and scans the result with de-ai. Nothing
+`writing-voice/` before drafting and scans the result with filter-tells. Nothing
 changes in a repository without that directory.
 
 One worktree, one PR per epic: every child lands on this one branch; `/do-work`

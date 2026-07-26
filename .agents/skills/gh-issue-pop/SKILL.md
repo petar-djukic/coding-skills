@@ -155,7 +155,7 @@ The main repo stays on `main` throughout.
 
 After `gh-issue-pop`, run `/do-work` — repeatedly for a multi-sub-issue epic (one sub-issue per pass) until every sub-issue is closed, then Phase 5 opens the PR. Decomposition is one level deep and one worktree per epic.
 
-`/do-work` routes each sub-issue by deliverable: documentation, prose, or code. A sub-issue whose output is prose a person reads — a paper section, a README, a post — takes the Prose workflow, which learns the repository's voice from `writing-voice/` before drafting and scans the result with de-ai. Nothing changes in a repository without that directory.
+`/do-work` routes each sub-issue by deliverable: documentation, prose, or code. A sub-issue whose output is prose a person reads — a paper section, a README, a post — takes the Prose workflow, which learns the repository's voice from `writing-voice/` before drafting and scans the result with filter-tells. Nothing changes in a repository without that directory.
 
 If, while running `/do-work`, a sub-issue turns out too big to finish in one pass, do not pop again — nested worktrees are not supported. Split that sub-issue into smaller **sibling** sub-issues under the same epic with `/gh-issue-push`, work them in the same worktree, and let the epic's single PR close them all. `gh-issue-pop` is only ever run from `main`, never from inside a worktree.
 

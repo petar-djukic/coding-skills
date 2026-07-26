@@ -24,7 +24,7 @@ On opening a repository — or at the latest before running any skill that invok
 scripts/ensure-env.sh
 ```
 
-It checks for pixi (installing it if absent, unless `SKILL_ENV_NO_INSTALL` is set), then materializes the locked environment. It is idempotent and fast once provisioned. Run skill scripts through it with `pixi run --manifest-path <agent-dir>/pixi.toml python <script>`. The de-ai detectors need only bash and the Python stdlib, so they run without this step.
+It checks for pixi (installing it if absent, unless `SKILL_ENV_NO_INSTALL` is set), then materializes the locked environment. It is idempotent and fast once provisioned. Run skill scripts through it with `pixi run --manifest-path <agent-dir>/pixi.toml python <script>`. The filter-tells detectors need only bash and the Python stdlib, so they run without this step.
 
 ## Pre-Commit Quality Gate
 
@@ -293,7 +293,7 @@ been through any of those is disclosed; rotate it rather than filing it.
 
 ## Consumers
 
-`de-ai/scripts/pangram.py`, `update-references/scripts/scholar.py`, and
+`filter-tells/scripts/pangram.py`, `update-references/scripts/scholar.py`, and
 `update-references/scripts/semantic_scholar.py` resolve through
 `scripts/secrets.py`. `python3 <surface>/scripts/secrets.py` reports which
 services are configured, printing names and status, never values.
@@ -683,8 +683,8 @@ Structure. Company templates typically include:
 
 Any writing repository may carry a `writing-voice/` directory of exemplar
 samples that define the target voice for text generated in that repository.
-The prose skills read it: `de-ai` measures drafts against it and steers
-rewrites toward it, and `match-voice` accepts it as a curated exemplar source.
+The prose skills read it: `filter-tells` measures drafts against it and steers
+rewrites toward it, and `match-structure` accepts it as a curated exemplar source.
 The contract is generic — the same layout works in any repository.
 
 ## Layout
@@ -741,24 +741,24 @@ are additive, never required.
 
 ## Consumers
 
-- **de-ai** — builds a baseline profile from the samples (metrics reported as
+- **filter-tells** — builds a baseline profile from the samples (metrics reported as
   distances from it, not only against fixed thresholds) and injects
   topically-nearest exemplar passages into rewrite and overshoot prompts as
   voice anchors.
-- **match-voice** — accepts the manifest as a curated exemplar source, so a
+- **match-structure** — accepts the manifest as a curated exemplar source, so a
   repository without a `references.yaml` corpus can still use persona
   extraction and comparison.
-- **voice-rewrite** — retrieves the same anchors and sends them with the
+- **match-voice** — retrieves the same anchors and sends them with the
   paragraph to a second model family, then gates the candidate on citation and
   number preservation, meaning entailment, anchor similarity, and register.
 - **do-work** — its Prose workflow reads the manifest and the nearest samples
-  before drafting, and scans the produced prose with de-ai before committing,
+  before drafting, and scans the produced prose with filter-tells before committing,
   so a writing repository gets the rule from the workflow rather than from a
   per-repo note. Repositories without `writing-voice/` are unaffected.
 
 - **Pangram check** — an optional external measurement, and the only consumer
   that sends text off the machine. Governed by the consent rule below.
-- **de-ai's eval harness** — uses the `author-voice` exemplars as the human
+- **filter-tells's eval harness** — uses the `author-voice` exemplars as the human
   class when calibrating detector false-positive rates. It reads them in place
   and records provenance rather than text, so a private corpus stays private;
   the skills directory is shared by symlink, and samples copied into it would
@@ -772,7 +772,7 @@ Reference implementation of the directory: `petar-djukic/autogenic-systems`
 
 ## Uploading a draft to an external detector
 
-Every other tool here runs locally. `voice-rewrite` prefers a local model
+Every other tool here runs locally. `match-voice` prefers a local model
 precisely so unpublished prose stays on the machine. An external AI detector
 breaks that deliberately, so it asks first — every time.
 
@@ -793,8 +793,8 @@ raised rather than uploaded. The user may still say yes; they should say it
 knowing that.
 
 **No key, or a declined prompt, means skip.** Say the check was skipped. Never
-pass silently, and never present a local de-ai result as though it were the
+pass silently, and never present a local filter-tells result as though it were the
 external one — the whole value of an outside detector is that it is outside.
 
 **A result is evidence, not a verdict.** It never certifies a document on its
-own; see de-ai's Verdict Validity Rules.
+own; see filter-tells's Verdict Validity Rules.
