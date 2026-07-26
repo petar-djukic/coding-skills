@@ -73,7 +73,7 @@ been through any of those is disclosed; rotate it rather than filing it.
 
 ## Consumers
 
-`filter-tells/scripts/pangram.py`, `update-references/scripts/scholar.py`, and
+`scripts/pangram.py`, `update-references/scripts/scholar.py`, and
 `update-references/scripts/semantic_scholar.py` resolve through
-`scripts/secrets.py`. `python3 <surface>/scripts/secrets.py` reports which
-services are configured, printing names and status, never values.
+`scripts/credentials.py`. `python3 <surface>/scripts/credentials.py` reports
+which services are configured, printing names and status, never values.
