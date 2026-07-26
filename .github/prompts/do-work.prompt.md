@@ -105,63 +105,38 @@ sounds is part of whether it is right.
 
 ---
 
-## Documentation Workflow
+## Finishing a unit
 
-Use this workflow when the deliverable is **YAML documentation** under `docs/`: PRDs, use cases, test suites, ARCHITECTURE, engineering guidelines, SPECIFICATIONS.
+Identical for every deliverable type. The workflow sections below state only
+what differs.
 
-Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan existing `docs/specs/product-requirements/`; for use cases `docs/specs/use-cases/`; for test suites `docs/specs/test-suites/`.
-
-## 1. Select a documentation task
-
-1. List open sub-issues and pick a documentation one (output path under `docs/`)
-2. Assign yourself to claim it:
-
-   ```bash
-   gh issue edit <number> --repo <owner>/<repo> --add-assignee @me
-   ```
-
-## 2. Before writing
-
-1. **Read the sub-issue body** and note:
-   - **Output path** (exact file)
-   - **Format rule** (e.g., prd-format, use-case-format, architecture-format)
-   - **Required Reading** file list — read all of them
-   - **Acceptance Criteria**
-
-2. **Read the format rule** from `docs/constitutions/design.yaml` (document_types section)
-
-3. Read any referenced existing content for consistency
-
-## 3. Write the doc
-
-1. Produce the deliverable at the exact output path given in the sub-issue body
-2. Include all required fields from the format rule
-3. Follow documentation standards from design.yaml (concise, active voice, no forbidden terms)
-4. Verify the Acceptance Criteria
-
-## 4. After writing
-
-1. **Check completeness** against Acceptance Criteria and the format rule checklist
-2. **Run the repo's consistency check** — `mage audit`, or `mage analyze` in repos that name the target that way — to validate documentation consistency. Fix any issues before proceeding. Skip if the repo defines neither.
-3. **Calculate metrics**: tokens used; run `mage stats` for LOC and doc word counts
-4. **Log completion** — the `Actual LOC` line is required; the sub-issue is not done without it:
+1. **Verify the Acceptance Criteria** from the sub-issue body.
+2. **Run the repo's consistency check** — `mage audit`, or `mage analyze` where
+   the target is named that way. Fix what it reports. Skip if the repo defines
+   neither.
+3. **Log completion.** The `Actual LOC` line is required; a unit is not done
+   without it.
 
    ```bash
    gh issue comment <number> --repo <owner>/<repo> --body "Completed in commit <sha>.
 
    <summary of work>
 
-   Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>)
+   Actual LOC: <from mage stats deltas> (Estimated: <this issue's Estimated LOC>)
    tokens: <count>"
    ```
 
-   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` then `bd sync` (tracker state, persisted separately from the code branch — never `git add .beads/` here).
+   **gh mode:** do not close the sub-issue by hand — the commit's
+   `Closes #<number>` auto-closes it at merge. **Beads mode is the opposite:**
+   nothing auto-closes, so close the child now with
+   `bd update <child-id> --status done` then `bd sync`, and never
+   `git add .beads/` on the code branch.
 
-5. **Commit** changes:
+4. **Commit and push.** Code commits must name the PRDs they implement.
 
    ```bash
    git add -A
-   git commit -m "Add <doc name> (<output path>) (GH-<parent>)
+   git commit -m "<what changed> (GH-<parent>)
 
    Closes #<sub-issue>
 
@@ -175,21 +150,42 @@ Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context. For PRDs scan exis
    git push
    ```
 
-6. If you found follow-up work, file it with `gh issue create`
+5. **File follow-up work** you found: `gh issue create`, or
+   `bd create "<title>" --label <epic-id>`.
 
-## 5. After completing the last sub-issue (documentation)
+## Finishing the last unit
 
-After completing work on a sub-issue, check whether all sub-issues have completion comments. If all have been completed:
+When no open unit remains, before handing off:
 
-1. **Review all docs** created or modified during the epic for consistency
-2. **Verify parent issue acceptance criteria**
-3. **Evaluate use case completion**:
-   - Identify which use case(s) this epic contributes to
-   - If all criteria are met, update road-map.yaml to mark the use case status as "done"
-4. **File follow-up issues** for any gaps via `gh issue create`
-5. **Execute the matching pop command's Phase 5 in full** (`/gh-issue-pop` or, in beads mode, `/bd-issue-pop`) — it opens the PR, merges it to `main`, and closes the epic (beads mode closes the parent bead on the branch first, so it merges too)
+1. Review everything the epic produced for consistency — docs read together,
+   code inspected for naming, error handling, duplication, and coverage gaps.
+2. Verify the parent issue's acceptance criteria.
+3. Run the full test suite.
+4. Evaluate use-case completion; if the criteria are met, mark it done in
+   `road-map.yaml`.
+5. File follow-ups for gaps and technical debt.
+6. If implementation revealed design changes, ask before editing architecture
+   or PRD docs.
+7. **Execute the matching pop command's Phase 5 in full** — it opens the PR,
+   merges to `main`, and closes the epic.
 
 ---
+
+## Documentation Workflow
+
+**YAML documentation** under `docs/`: PRDs, use cases, test suites,
+ARCHITECTURE, engineering guidelines, SPECIFICATIONS.
+
+Read `docs/VISION.yaml` and `docs/ARCHITECTURE.yaml` for context, plus the
+existing files of the same type for consistency.
+
+From the sub-issue body take the **output path**, the **format rule**, and the
+**Required Reading** list — read all of it. Read the format rule itself from
+`docs/constitutions/design.yaml` (`document_types`).
+
+Produce the deliverable at the exact output path, with every field the format
+rule requires, following the repo's documentation standards. Then
+[finish the unit](#finishing-a-unit).
 
 ## Prose Workflow
 
@@ -247,94 +243,30 @@ rename turns into an eight-file edit.
 
 ## Code Workflow
 
-Use this workflow when the deliverable is **implementation**: packages, internal logic, cmd, workers, tests.
+**Implementation**: packages, internal logic, cmd, workers, tests. Code must
+correspond to existing PRDs and architecture (the code-prd-architecture-linking
+rule), and commits must name the PRDs.
 
-Follow the **code-prd-architecture-linking** rule: code must correspond to existing PRDs and architecture; commits must mention PRDs.
+Read `docs/VISION.yaml` and `docs/ARCHITECTURE.yaml`, the PRDs the sub-issue
+names, and its Requirements / Design Decisions / Acceptance Criteria in full.
+Read every file in Required Reading before touching it — **never propose
+changes to code you have not read**.
 
-Read docs/VISION.yaml and docs/ARCHITECTURE.yaml for context.
+Implement to the Requirements and Design Decisions. Write the tests the
+sub-issue or PRD specifies, and verify the Acceptance Criteria hold as
+behaviour, not as intent.
 
-## 1. Select a code task
+Do not write comments that rot. No `release 00.X`, `stub`, `placeholder`, `for
+now`, `not yet`, or `will be` unless they mark genuinely deferred work, and
+when you touch a file, resolve any existing comment that references a completed
+release, a removed symbol, or a deferral that is no longer true. Sweep before
+committing:
 
-1. List open sub-issues and pick a code one (output under `pkg/`, `internal/`, `cmd/`)
-2. Assign yourself to claim it:
+```bash
+grep -nE "release 0|stub|placeholder|removed now|not yet|will be|for now" <changed files>
+```
 
-   ```bash
-   gh issue edit <number> --repo <owner>/<repo> --add-assignee @me
-   ```
-
-## 2. Before implementing
-
-1. **Identify related PRDs and docs** from the sub-issue body. Read them.
-2. Read the sub-issue body (Requirements, Design Decisions, Acceptance Criteria) in full.
-3. **Read existing code** that you will modify or extend:
-   - Read all files listed in Required Reading
-   - **NEVER propose changes to code you haven't read first**
-   - Understand existing patterns, conventions, and interfaces
-
-## 3. Implement
-
-1. Implement according to Requirements and Design Decisions and the related PRDs/architecture
-2. Verify the Acceptance Criteria are met (tests, behaviour, observability if specified)
-3. Write tests if the sub-issue or PRD specifies them
-4. Where appropriate, add a short comment listing implemented PRDs
-5. Do not write comments that rot: no `release 00.X`, `stub`, `placeholder`, `for now`, `not yet`, or `will be` tags unless they mark genuinely deferred, unbuilt work. When you touch a file, update or delete any existing comment that references a now-completed release, a removed symbol, or a deferral that is no longer true. Before committing, sweep the files you changed — `grep -nE "release 0|stub|placeholder|removed now|not yet|will be|for now" <changed files>` — and resolve every stale hit.
-
-## 4. After implementation
-
-1. **Run any tests** to verify your work
-2. **Calculate metrics**: tokens used; run `mage stats` for LOC deltas
-3. **Log completion** — the `Actual LOC` line is required; the sub-issue is not done without it:
-
-   ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "Completed in commit <sha>.
-
-   <summary of work>
-
-   Actual LOC: <production/test lines from mage stats deltas> (Estimated: <this issue's Estimated LOC>)
-   tokens: <count>"
-   ```
-
-   gh mode: do not close the sub-issue manually — the commit's `Closes #<number>` auto-closes it when the PR merges. Beads mode is the opposite: there is no auto-close, so close the child now with `bd update <child-id> --status done` then `bd sync` (tracker state, persisted separately from the code branch — never `git add .beads/` here).
-
-4. **Commit** changes. **Commit message must mention which PRDs are implemented**:
-
-   ```bash
-   git add -A
-   git commit -m "Implement X (prd-feature-name) (GH-<parent>)
-
-   Closes #<sub-issue>
-
-   - Description of changes
-
-   Stats:
-     Lines of code (Go, production): <prod_loc> (+<delta>)
-     Lines of code (Go, tests):      <test_loc> (+<delta>)
-     Words (documentation):          <doc_words> (+<delta>)
-
-   Skill: do-work
-   Called-by: gh-issue-pop"   # beads mode: Called-by: bd-issue-pop
-   git push
-   ```
-
-5. If you discovered new work, file it with `gh issue create`
-
-## 5. After completing the last sub-issue (code)
-
-After completing work on a sub-issue, check whether all sub-issues have completion comments. If all have been completed, perform a **thorough code inspection**:
-
-1. **Read all files** created or modified during the epic
-2. **Check for inconsistencies**: naming conventions, error handling, duplication, test coverage gaps
-3. **Verify parent issue acceptance criteria**
-4. **Run full test suite** and any integration tests
-5. **File follow-up issues** for technical debt or improvements via `gh issue create`
-6. **Check for doc updates needed**: if implementation revealed design changes, ask the user before updating architecture or PRD docs
-7. **Evaluate use case completion**:
-   - Identify which use case(s) this epic contributes to
-   - If all criteria are met, update road-map.yaml to mark the use case status as "done"
-8. **Execute the matching pop command's Phase 5 in full** (`/gh-issue-pop` or, in beads mode, `/bd-issue-pop`) — it opens the PR, merges it to `main`, and closes the epic (beads mode closes the parent bead on the branch first, so it merges too)
-9. **Summarize epic completion**: run `mage stats` and report what was built, total metrics, deviations, follow-up work, use case status
-
----
+Then [finish the unit](#finishing-a-unit).
 
 ## Important Notes
 

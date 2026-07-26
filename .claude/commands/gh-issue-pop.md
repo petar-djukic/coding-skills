@@ -75,74 +75,34 @@ After user approval:
    The worktree lives at `../gh-<number>-<slug>` (sibling of the current repo directory).
    All subsequent work happens inside this worktree. Record the path: `WT=../gh-<number>-<slug>`
 
-### If there are 2 or more sub-issues
+### Create the sub-issues and the marker
 
-1. Create each sub-issue on GitHub:
-   ```bash
-   gh issue create --repo <owner>/<repo> \
-     --title "<sub-issue title>" \
-     --body "<structured description with Required Reading, Files to Create/Modify, Requirements, Acceptance Criteria>"
-   ```
-   Capture the issue number returned for each sub-issue.
+With 2+ sub-issues, create each one (`gh issue create` with its Required
+Reading, Files to Create/Modify, Requirements, Acceptance Criteria), then link
+it to the parent so the progress checklist appears:
 
-2. Link each sub-issue to the parent using the GitHub sub-issues API:
-   ```bash
-   gh api repos/<owner>/<repo>/issues/<parent-number>/sub_issues \
-     --method POST \
-     --field sub_issue_id=<sub-issue-database-id>
-   ```
-   Get the database ID with: `gh api repos/<owner>/<repo>/issues/<sub-number> --jq '.id'`
-   Repeat for each sub-issue. The parent issue will show a progress checklist.
+```bash
+gh api repos/<owner>/<repo>/issues/<parent-number>/sub_issues \
+  --method POST --field sub_issue_id=$(gh api repos/<owner>/<repo>/issues/<sub-number> --jq '.id')
+```
 
-3. Commit an initial marker in the worktree:
-   ```bash
-   cd ../gh-<number>-<slug>
-   git commit --allow-empty -m "Pop GH-<number>: <title> into worktree
+With exactly one, skip sub-issue creation and claim the parent instead:
+`gh issue edit <number> --repo <owner>/<repo> --add-assignee @me`.
 
-   Sub-issues: <comma-separated list of #N>
-
-   Skill: gh-issue-pop
-   Called-by: <invoking skill, or 'user' if run directly>"
-   ```
-
-4. Push the branch:
-   ```bash
-   git push -u origin gh-<number>-<slug>
-   ```
-
-5. Report the parent issue URL and the list of sub-issue URLs to the user.
-
-### If there is exactly 1 sub-issue (single-issue path)
-
-1. Assign yourself to the parent issue to claim it:
-   ```bash
-   gh issue edit <number> --repo <owner>/<repo> --add-assignee @me
-   ```
-
-2. Commit an initial marker in the worktree:
-   ```bash
-   cd ../gh-<number>-<slug>
-   git commit --allow-empty -m "Pop GH-<number>: <title> into worktree
-
-   Skill: gh-issue-pop
-   Called-by: <invoking skill, or 'user' if run directly>"
-   ```
-
-3. Push the branch:
-   ```bash
-   git push -u origin gh-<number>-<slug>
-   ```
-
-4. Report the parent issue URL to the user. Work proceeds directly on the parent issue — no sub-issue tracking needed.
-
-All subsequent `/do-work` happens inside the worktree at `../gh-<number>-<slug>`. Before starting work, verify the worktree branch:
+Either way, commit the marker and push:
 
 ```bash
 cd ../gh-<number>-<slug>
-git branch --show-current  # should show gh-<number>-<slug>
+git commit --allow-empty -m "Pop GH-<number>: <title> into worktree
+
+Sub-issues: <comma-separated #N>      # omit on the single-issue path
+
+Skill: gh-issue-pop
+Called-by: <invoking skill, or 'user' if run directly>"
+git push -u origin gh-<number>-<slug>
 ```
 
-The main repo stays on `main` throughout.
+Report the parent issue URL, and the sub-issue URLs if there are any.
 
 ### Epics and further breakdown
 
@@ -240,95 +200,54 @@ ls .secrets/claude.json  # or the configured token file
 
 ## Phase 5 -- Open a Pull Request
 
-For the **single-issue path**, trigger Phase 5 when the work is complete (no sub-issue count to check).
-For the **multi-sub-issue path**, trigger Phase 5 when ALL sub-issues on the parent are closed.
+Trigger when the work is complete: on the single-issue path, when the parent's
+work is done; on the multi-sub-issue path, when every sub-issue is closed.
 
-1. If the issue is recurring (see Phase 6), execute Phase 6 now — before merging — so the next instance exists before this one closes.
+1. **If the issue is recurring** (see Phase 6), do Phase 6 now — before merging
+   — so the next instance exists before this one closes.
 
-2. For the multi-sub-issue path only — verify all sub-issues have been completed (each has a completion comment). List sub-issues:
+2. **Verify the units are actually done.** Multi-sub-issue path:
+
    ```bash
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
-     --jq '[.[] | {number: .number, title: .title, state: .state}]'
-   ```
-   If any sub-issue lacks a completion comment, or its comment has no `Actual LOC:` line (compared against that issue's `Estimated LOC`), do not proceed — a sub-issue is not done until both the completion comment and the Actual LOC are recorded. Report which sub-issues still need work.
-
-3. For the single-issue path — add a comment to the parent issue summarizing what was done:
-   ```bash
-   gh issue comment <number> --repo <owner>/<repo> --body "<summary of work: what changed, files touched, tokens used. Actual LOC: production/test lines from `mage stats` deltas, stated against the issue's Estimated LOC so estimation accuracy is on record>"
+     --jq '[.[] | {number, title, state}]'
    ```
 
-4. Push the final state of the feature branch:
-   ```bash
-   git push
-   ```
+   A sub-issue is not done until it has both a completion comment and an
+   `Actual LOC:` line stated against its `Estimated LOC`. If any lacks either,
+   stop and report which. Single-issue path: write that comment on the parent
+   now.
 
-5. Open a pull request against `main`:
-   ```bash
-   gh pr create --repo <owner>/<repo> \
-     --base main \
-     --head gh-<number>-<slug> \
-     --title "GH-<number>: <title>" \
-     --body "$(cat <<'EOF'
-   ## Summary
+3. **Push, then open the PR** against `main`, titled `GH-<number>: <title>`,
+   with sections: Summary (2-3 sentences), Changes, Stats (`mage stats` deltas
+   plus Estimated vs Actual LOC), and Test plan (consistency check, tests, docs
+   — where those exist). End with one `Closes #N` line per issue: the parent
+   and every sub-issue.
 
-   <2-3 sentence summary of what this delivered>
+   Those `Closes` lines are what auto-close the issues at merge. Sub-issue
+   commits carry their own as a redundant safeguard.
 
-   ## Changes
-
-   <bulleted list of what was produced>
-
-   ## Stats
-
-   <if mage stats is available, output of mage stats with deltas from start of work; include the issue's Estimated LOC vs the Actual LOC produced>
-
-   ## Test plan
-
-   <if a consistency-check target is available:>
-   - [ ] the consistency check (`mage audit` / `mage analyze`) passes
-   - [ ] All tests pass
-   - [ ] Documentation reviewed for consistency
-
-   Closes #<number>
-   Closes #<sub-issue-1>
-   Closes #<sub-issue-2>
-   ...
-   EOF
-   )"
-   ```
-
-   The `Closes #<number>` lines auto-close the parent and all sub-issues when the PR merges. For the single-issue path, only the parent `Closes` line is needed. Sub-issue commits also contain `Closes #<sub-issue>` as a redundant safeguard.
-
-6. Merge the pull request and delete the remote feature branch:
-   ```bash
-   gh pr merge --repo <owner>/<repo> --merge --delete-branch
-   ```
-
-7. Pull the merged changes into main (the main repo is already on `main`):
-   ```bash
-   git pull origin main
-   ```
-
-8. Remove the worktree and delete the local branch:
+4. **Merge and clean up:**
 
    ```bash
+   gh pr merge --repo <owner>/<repo> <pr-number> --merge --delete-branch
+   git pull origin main            # from the main checkout, already on main
    git worktree remove ../gh-<number>-<slug>
    git branch -d gh-<number>-<slug>
    ```
 
-9. Verify all issues were closed by the merge. Check the parent and every sub-issue:
+5. **Verify every issue actually closed** — the parent and each sub-issue.
+   GitHub's auto-close is not guaranteed:
+
    ```bash
-   gh issue view <number> --repo <owner>/<repo> --json state -q .state
-   # For multi-sub-issue path, also check each sub-issue:
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
-     --jq '[.[] | select(.state=="open") | {number: .number, title: .title}]'
-   ```
-   If any issue is still open, warn the user and close it explicitly:
-   ```bash
-   # WARNING: GitHub did not auto-close issue #<N> from the PR merge.
-   gh issue close <N> --repo <owner>/<repo> --comment "Completed via PR #<pr-number>. Auto-close did not trigger."
+     --jq '[.[] | select(.state=="open") | {number, title}]'
    ```
 
-10. Report the PR URL and confirm all issues (parent and sub-issues) are closed.
+   Anything still open, warn the user and close it explicitly with
+   `gh issue close <N> --comment "Completed via PR #<pr>. Auto-close did not trigger."`
+
+6. Report the PR URL and confirm all issues are closed.
 
 **Note:** Phase 5 may happen in a later session. When running `/do-work` and closing the last sub-issue, check the open sub-issue count and execute Phase 5 automatically if it reaches 0.
 
