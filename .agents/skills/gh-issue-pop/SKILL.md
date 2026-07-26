@@ -1,68 +1,58 @@
 ---
 name: "gh-issue-pop"
-description: "Pop a GitHub issue from the current repository, decompose it into GitHub sub-issues on a feature branch, and open a PR when all sub-issues are closed."
+description: "Pop a GitHub issue, decompose it into sub-issues on a worktree branch, and open"
 ---
 
 # gh-issue-pop command
 
 Apply this command workflow. Treat any text after its invocation as the command input.
 
-Pop a GitHub issue from the current repository, decompose it into GitHub sub-issues on a feature branch, and open a PR when all sub-issues are closed.
-
-If the decomposition yields only one sub-issue, skip sub-issue creation entirely: work directly on the parent issue, add a comment describing what was done, and close it via the PR.
-
-Sub-issue progress is visible directly on the parent issue page.
+Pop a GitHub issue, decompose it into sub-issues on a worktree branch, and open
+a PR when they are all closed. Sub-issue progress shows on the parent issue
+page.
 
 ## Input
 
 $ARGUMENTS
 
-If arguments contain an issue number (e.g. `42` or `#42`), use that issue. If arguments contain a URL, extract the issue number. If no number is given, list open issues and ask the user to pick one.
+An issue number (`42`, `#42`) or a URL. With neither, list open issues and ask
+which.
 
-## Phase 0 -- Detect Repository
+## Phase 0-2 -- Fetch and gather context
 
-1. Run `gh repo view --json nameWithOwner -q .nameWithOwner` and use the result as `<owner>/<repo>` for all `gh` commands below.
+```bash
+gh repo view --json nameWithOwner -q .nameWithOwner        # <owner>/<repo> for everything below
+gh issue view <number> --repo <owner>/<repo> --json number,title,body,labels,state
+```
 
-## Phase 1 -- Fetch the GitHub Issue
+Stop and report if the issue is not open. Show its title, body, and labels.
 
-1. Fetch the issue:
-   ```bash
-   gh issue view <number> --repo <owner>/<repo> --json number,title,body,labels,state
-   ```
-2. If the issue is not open, stop and report its state.
-3. Display the issue title, body, and labels to the user.
+Read `docs/VISION.yaml`, `docs/ARCHITECTURE.yaml`, `docs/road-map.yaml`,
+`docs/constitutions/design.yaml`, and the READMEs relevant to the issue. List
+any sub-issues already attached — this may be a resumed session.
 
-## Phase 2 -- Gather Project Context
+Probe the build tool once; its output gates every later mage step, and a repo
+without mage skips them silently:
 
-1. Read docs/VISION.yaml, docs/ARCHITECTURE.yaml, docs/road-map.yaml, and `docs/constitutions/design.yaml`.
-2. Read READMEs for product requirements and use cases relevant to the issue.
-3. List open sub-issues already attached to this parent (in case this is a resumed session):
-   ```bash
-   gh api repos/<owner>/<repo>/issues/<number>/sub_issues --jq '[.[] | {number: .number, title: .title, state: .state}]'
-   ```
-4. Probe available mage targets (the result gates all subsequent mage steps):
-   ```bash
-   mage -l 2>/dev/null || true
-   ```
-   Record which targets exist. If `mage` is not installed or the repo has no Magefile, treat all mage targets as absent and skip mage-dependent steps silently.
-5. If the probe shows a consistency-check target — commonly `audit` or `analyze` — run it (`mage audit` or `mage analyze`) to identify spec issues. Otherwise skip.
-6. If `stats` appeared in the probe, run `mage stats` for current LOC and documentation metrics. Otherwise skip.
-7. Summarize the current project state.
+```bash
+mage -l 2>/dev/null || true
+```
 
-## Phase 3 -- Propose Sub-Issues
+Run the consistency check if one exists (`mage audit`, or `mage analyze` where
+it is named that way) and `mage stats` if present. Summarize the project state.
 
-Using the GitHub issue as the epic, propose sub-issues that decompose it into actionable work:
+## Phase 3 -- Propose sub-issues
 
-- Type: documentation or code
-- Required Reading: mandatory list of files the agent must read
-- Files to Create/Modify: explicit file list
-- Structure: Requirements, Design Decisions (optional), Acceptance Criteria
-- Code task sizing: 300-700 lines of production code, no more than 5 files
-- No more than 10 sub-issues
+Decompose the epic into units, each with: type (documentation or code),
+Required Reading, Files to Create/Modify, Requirements, Acceptance Criteria,
+and Design Decisions where they matter. Size code units at 300-700 production
+lines across no more than 5 files. No more than 10 sub-issues.
 
-Present the proposed breakdown to the user for approval. Do not create anything until the user agrees.
+Present the breakdown and **create nothing until the user agrees**.
 
-**Single-sub-issue rule:** If the natural breakdown is exactly one sub-issue, tell the user: "This fits in a single task — I'll work directly on the parent issue without creating a sub-issue." Proceed to Phase 4 (single-issue path) after approval.
+If the natural breakdown is a single unit, say so — "this fits in one task, so
+I will work the parent issue directly" — and take the single-issue path in
+Phase 4.
 
 ## Phase 4 -- Create Worktree and Sub-Issues
 
@@ -119,91 +109,32 @@ After `gh-issue-pop`, run `/do-work` — repeatedly for a multi-sub-issue epic (
 
 If, while running `/do-work`, a sub-issue turns out too big to finish in one pass, do not pop again — nested worktrees are not supported. Split that sub-issue into smaller **sibling** sub-issues under the same epic with `/gh-issue-push`, work them in the same worktree, and let the epic's single PR close them all. `gh-issue-pop` is only ever run from `main`, never from inside a worktree.
 
-## Phase 4b -- Generator Mode (Alternative)
+## Phase 4b -- Generator mode (alternative)
 
-**Capability gate:** This phase requires the cobbler orchestrator. If the Phase 2 mage probe did not show `generator:start` in the target list, skip this entire section and do not mention generator mode to the user.
+**Gated on the cobbler orchestrator.** If the Phase 2 probe did not list
+`generator:start`, skip this section and do not mention it.
 
-Use this phase instead of Phase 4 when the user explicitly requests autonomous execution
-(e.g. "use generator mode", "run this automatically", or passes `--generator`)
-and the repo has the cobbler orchestrator installed (`generator:start` exists in `mage -l`).
+Use it instead of Phase 4 only when the user asks for autonomous execution
+("use generator mode", `--generator`). It drives `mage generator:start/run`
+instead of hand-creating sub-issues: Claude proposes tasks via
+`cobbler:measure` and executes them via `cobbler:stitch`. The interactive path
+is the default, and it trades review-before-execution for review-after.
 
-The generator mode drives `mage generator:start/run` rather than creating GitHub sub-issues
-manually. Claude proposes tasks autonomously via `cobbler:measure` and executes them via
-`cobbler:stitch`. The interactive path (Phase 4) is the default.
-
-### Prerequisites
-
-Before starting, verify the following in the repo's `configuration.yaml`:
-
-```yaml
-cobbler:
-  issues_repo: <owner>/<repo>     # must match current repo
-claude:
-  args:
-    - --dangerously-skip-permissions
-    - -p
-    # other required args
-```
-
-For library repos where Go source must not be deleted, also confirm:
-
-```yaml
-generation:
-  preserve_sources: true
-```
-
-Verify Claude credentials exist:
+First confirm in `configuration.yaml` that `cobbler.issues_repo` matches this
+repo, that `claude.args` carries the required flags, and — for library repos
+whose Go source must survive — that `generation.preserve_sources` is true.
+Check the Claude credentials file exists.
 
 ```bash
-ls .secrets/claude.json  # or the configured token file
+git checkout main
+COBBLER_GEN_NAME=gh-<number>-<slug> mage generator:start   # creates generation-gh-<number>-<slug>
+mage generator:run                                         # measure+stitch until no open issues
+mage generator:resume                                      # after an interruption
 ```
 
-### Steps
-
-1. Ensure the main repo is on `main` and the worktree is clean:
-
-   ```bash
-   git checkout main
-   ```
-
-2. Start a generation from the current branch, naming it after the issue slug:
-
-   ```bash
-   COBBLER_GEN_NAME=gh-<number>-<slug> mage generator:start
-   ```
-
-   This creates a `generation-gh-<number>-<slug>` branch and (unless `preserve_sources`
-   is true) resets Go sources. Note the generation branch name printed in the output.
-
-3. Run autonomous measure+stitch cycles:
-
-   ```bash
-   mage generator:run
-   ```
-
-   Claude proposes tasks via measure and executes them via stitch. Runs continue until
-   no open issues remain or the configured cycle limit is reached. Monitor progress in
-   the log output.
-
-4. If the run is interrupted, resume it:
-
-   ```bash
-   mage generator:resume
-   ```
-
-5. When `generator:run` reports completion (no open issues), the generation branch holds
-   all the work. Proceed to **Phase 5** using the generation branch as the feature branch:
-   set `<slug>` to the generation branch name (e.g. `generation-gh-<number>-<slug>`)
-   and substitute it for `gh-<number>-<slug>` in Phase 5 steps.
-
-### Tradeoff Summary
-
-| | Interactive (Phase 4) | Generator (Phase 4b) |
-| -- | -- | -- |
-| Decomposition | Claude reads issue, proposes sub-issues | Claude proposes tasks autonomously via measure |
-| Review opportunity | Before execution (sub-issues visible on GitHub) | After execution (PR review) |
-| Execution | Agent runs /do-work per sub-issue | Claude runs stitch autonomously |
-| Best for | Tasks needing decomposition review | Well-specified epics with clear specs |
+When `generator:run` reports no open issues, the generation branch holds the
+work: run Phase 5 against it, substituting the generation branch name for
+`gh-<number>-<slug>`.
 
 ## Phase 5 -- Open a Pull Request
 
