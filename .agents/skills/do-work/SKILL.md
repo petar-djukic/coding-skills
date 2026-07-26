@@ -212,11 +212,11 @@ standards and skip the rest of this step — nothing changes.
 If it exists, read it before writing a word:
 
 ```bash
-python3 <de-ai>/scripts/voice_anchors.py discover <output-file>
-python3 <de-ai>/scripts/voice_anchors.py anchors --text <passage-file>|- --for <output-file> -k 3
+python3 <filter-tells>/scripts/voice_anchors.py discover <output-file>
+python3 <filter-tells>/scripts/voice_anchors.py anchors --text <passage-file>|- --for <output-file> -k 3
 ```
 
-(`<de-ai>` is the de-ai skill directory on whichever agent surface is in use;
+(`<filter-tells>` is the filter-tells skill directory on whichever agent surface is in use;
 commands do not hardcode a surface path. `--text` reads a *file* or stdin, not
 a literal passage — pipe the draft passage in with `-`.)
 
@@ -233,32 +233,32 @@ like a translation. The samples are cheap to read and expensive to retrofit.
 
 ### 2. Scan the prose before committing
 
-Prose written by a model is the input the `de-ai` detectors exist for, so run
+Prose written by a model is the input the `filter-tells` detectors exist for, so run
 them on your own output rather than shipping it unchecked:
 
 ```bash
-bash <de-ai>/scripts/detect-lexical.sh <output-file>
-python3 <de-ai>/scripts/detect-structural.py <output-file>
+bash <filter-tells>/scripts/detect-lexical.sh <output-file>
+python3 <filter-tells>/scripts/detect-structural.py <output-file>
 ```
 
 With a `writing-voice/` directory present, add `--voice-profile` to report
 distance from the author's baseline instead of only against fixed thresholds
-(see the de-ai SKILL.md). Fix what fires. A flag is a prompt to look, not a
+(see the filter-tells SKILL.md). Fix what fires. A flag is a prompt to look, not a
 verdict — a term of art that trips the lexical scan stays, and you say so in
 the completion comment rather than damaging the sentence to silence a grep.
 
 When the prose has to stop sounding model-written and rewriting it yourself is
-not getting there, hand the passage to the `voice-rewrite` skill, which sends
+not getting there, hand the passage to the `match-voice` skill, which sends
 it to a different model family with the same anchors and gates the result.
 
 ### 3. External check (optional, usually skipped)
 
-de-ai is a denylist you have just been writing against, so its silence is weak
+filter-tells is a denylist you have just been writing against, so its silence is weak
 evidence that the prose reads as human. An external detector is independent of
 it. Most repositories will not have one configured:
 
 ```bash
-python3 <de-ai>/scripts/pangram.py --check
+python3 <filter-tells>/scripts/pangram.py --check
 ```
 
 If that reports no key, **skip it and move on.** That is the normal state, not
