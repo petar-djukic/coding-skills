@@ -64,8 +64,20 @@ RUN="pixi run --manifest-path <skill>/../../pixi.toml python"
 ```
 
 This supplies PyYAML and the `anthropic` package, so no `pip install` is
-needed. `match_structure.py` still needs `ANTHROPIC_API_KEY` (or an active
-`ant auth login`) at run time — pixi manages packages, not secrets.
+needed.
+
+`match_structure.py` defaults to `gemma4:12b` over ollama and needs no API key.
+Override with `--model` / `--endpoint`, or `MATCH_VOICE_MODEL` — the same knob
+`match-voice` and `tighten-style` use.
+
+**Do not point `--model` at a Claude model for a rewrite you care about the
+detectability of.** A `claude-*` name routes to the Anthropic API (and then
+needs `ANTHROPIC_API_KEY` or an active `ant auth login`, plus the `anthropic`
+package). It is available for analysis, but rewriting through Claude puts the
+prose back into Claude's register: measured on idea-factory's
+how-to-loop-engineering, a rewrite through `claude-opus-4-8` took Pangram
+`fraction_ai` from 0.676 to 0.753, while the same pipeline through gemma4
+reached 0.163.
 
 ## The workflow (interactive)
 
@@ -191,9 +203,10 @@ paper with the original draft as baseline; flagged passages are listed in
 the JSON summary and a warning is printed. Reports land in
 `<db-dir>/voice-reports/`; usage stats print to stdout.
 
-Requires `ANTHROPIC_API_KEY` (or an active `ant auth login` profile) at run
-time; the `anthropic` package itself comes from the pixi environment. Suitable
-for CI, cron, or a mage target.
+Runs against ollama by default (`gemma4:12b`), so it needs no secret and is
+suitable for CI, cron, or a mage target. Only a `claude-*` `--model` requires
+`ANTHROPIC_API_KEY` (or an active `ant auth login` profile); the `anthropic`
+package itself comes from the pixi environment.
 
 ## Exemplar sources
 
@@ -225,8 +238,9 @@ profile is read as a plain file — no cross-skill import.
 ## Dependencies
 
 Both scripts run in the pixi environment (see "Running the scripts"), which
-supplies PyYAML and — for `match_structure.py` — the `anthropic` package;
-`style.py` is otherwise pure stdlib. No `pip install` is needed. The corpus
+supplies PyYAML and — for `match_structure.py` with a `claude-*` `--model` —
+the `anthropic` package; on the default ollama path neither script needs it,
+and `style.py` is pure stdlib. No `pip install` is needed. The corpus
 must have been fetched by `update-references` with markdown conversion
 (issue #37) — plain-text legacy corpora work but lose section detection
 quality.

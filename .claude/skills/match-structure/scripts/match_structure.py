@@ -30,18 +30,19 @@ the `anthropic` package, and PyYAML.
 """
 
 import argparse
+import collections
 import glob as globmod
 import json
 import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from datetime import date
 
-try:
-    import anthropic
-except ImportError:
-    sys.exit("The anthropic package is required. Install with: python3 -m pip install --user anthropic")
+# anthropic is imported lazily in _AnthropicBackend: it is only needed when the
+# selected model is a Claude one, and the default is not.
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STYLE_PY = os.path.join(SKILL_DIR, "scripts", "style.py")
@@ -49,7 +50,15 @@ ANALYSIS_MD = os.path.join(SKILL_DIR, "references", "voice-analysis-instructions
 APPLICATION_MD = os.path.join(SKILL_DIR, "references", "style-application-instructions.md")
 REPORT_TEMPLATE = os.path.join(SKILL_DIR, "references", "comparison-report-template.md")
 
-MODEL = "claude-opus-4-8"
+# The rewriting model must NOT default to Claude. Measured on
+# idea-factory's how-to-loop-engineering (2026-07-26): rewriting through
+# claude-opus-4-8 moved Pangram fraction_ai 0.676 -> 0.753, and hand repairs
+# after it 0.753 -> 0.775, while the identical pipeline through gemma4 took the
+# same article to 0.163. Claude rewriting Claude lands back in Claude's
+# register, which is what detectors key on -- the same reason match-voice and
+# tighten-style already default to gemma4. Keep this default in that family.
+DEFAULT_MODEL = os.environ.get("MATCH_VOICE_MODEL", "gemma4:12b")
+DEFAULT_ENDPOINT = os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434")
 MAX_EXCERPT_CHARS = 12000          # per paper in comparison mode
 MAX_CORPUS_CHARS = 350000          # ~100K tokens
 FEWSHOT_CHARS = 2500               # per exemplar excerpt in rewrite prompts
@@ -69,20 +78,87 @@ def read(path):
         return f.read()
 
 
+Usage = collections.namedtuple("Usage", "output_tokens")
+
+
+def _flatten(system, content_blocks):
+    """Collapse Anthropic-shaped system + content blocks into one prompt."""
+    def text_of(x):
+        if isinstance(x, str):
+            return x
+        if isinstance(x, dict):
+            return x.get("text", "")
+        return "".join(b.get("text", "") for b in x if isinstance(b, dict))
+
+    sys_text = text_of(system) if not isinstance(system, list) else \
+        "\n\n".join(b.get("text", "") for b in system if isinstance(b, dict))
+    body = "\n\n".join(text_of(b) for b in content_blocks)
+    return f"{sys_text}\n\n{body}"
+
+
+class _OllamaBackend:
+    """Default backend. No API key, no third-party upload, gemma4 by default."""
+
+    def __init__(self, model, endpoint, timeout=900):
+        self.model, self.endpoint, self.timeout = model, endpoint, timeout
+
+    def call(self, system, content_blocks, max_tokens):
+        payload = json.dumps({
+            "model": self.model,
+            "prompt": _flatten(system, content_blocks),
+            "stream": False,
+            "options": {"temperature": 0.7, "num_predict": max_tokens},
+        }).encode()
+        req = urllib.request.Request(
+            f"{self.endpoint}/api/generate", data=payload,
+            headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                text = json.loads(r.read()).get("response", "")
+        except urllib.error.URLError as e:
+            sys.exit(f"ollama unreachable at {self.endpoint}: {e}. Start it, "
+                     f"pull {self.model}, or pass --model claude-... to use the API.")
+        if not text.strip():
+            sys.exit(f"Empty response from {self.model}")
+        # ollama reports eval_count, not billed tokens; approximate for the log.
+        return text.strip(), Usage(output_tokens=len(text.split()))
+
+
+class _AnthropicBackend:
+    """Opt-in: only when --model names a Claude model."""
+
+    def __init__(self, model):
+        try:
+            import anthropic
+        except ImportError:
+            sys.exit("--model names a Claude model, which needs the anthropic "
+                     "package: python3 -m pip install --user anthropic")
+        self.model = model
+        self.client = anthropic.Anthropic()
+
+    def call(self, system, content_blocks, max_tokens):
+        with self.client.messages.stream(
+            model=self.model,
+            max_tokens=max_tokens,
+            thinking={"type": "adaptive"},
+            system=system,
+            messages=[{"role": "user", "content": content_blocks}],
+        ) as stream:
+            response = stream.get_final_message()
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        if not text.strip():
+            sys.exit(f"Empty response (stop_reason: {response.stop_reason})")
+        return text, response.usage
+
+
+def make_backend(model, endpoint):
+    return (_AnthropicBackend(model) if model.startswith("claude-")
+            else _OllamaBackend(model, endpoint))
+
+
 def call_model(client, system, content_blocks, max_tokens=16000):
-    """One streamed API call; system may be a string or content-block list."""
-    with client.messages.stream(
-        model=MODEL,
-        max_tokens=max_tokens,
-        thinking={"type": "adaptive"},
-        system=system,
-        messages=[{"role": "user", "content": content_blocks}],
-    ) as stream:
-        response = stream.get_final_message()
-    text = next((b.text for b in response.content if b.type == "text"), "")
-    if not text.strip():
-        sys.exit(f"Empty response (stop_reason: {response.stop_reason})")
-    return text, response.usage
+    """One model call through whichever backend `client` is."""
+    return client.call(system, content_blocks, max_tokens)
 
 
 def resolve_paper(spec, db_path):
@@ -395,6 +471,13 @@ def main():
                    help="apply the blueprint (or corpus profile) to the draft")
     p.add_argument("--blueprint", default=None,
                    help="blueprint to apply (default: most recent voice-blueprint-*.md, else voice-profile.md)")
+    p.add_argument("--model", default=DEFAULT_MODEL,
+                   help=f"rewriting/analysis model (default: {DEFAULT_MODEL}). "
+                        "A claude-* name routes to the Anthropic API and needs "
+                        "the anthropic package; anything else goes to ollama. "
+                        "Do not default this to Claude — see DEFAULT_MODEL.")
+    p.add_argument("--endpoint", default=DEFAULT_ENDPOINT,
+                   help=f"ollama endpoint (default: {DEFAULT_ENDPOINT})")
     p.add_argument("--mimic", action="store_true",
                    help="also apply single-author idiosyncrasies")
     args = p.parse_args()
@@ -405,8 +488,8 @@ def main():
         p.error("--rewrite requires a draft")
 
     db_dir = os.path.dirname(os.path.abspath(args.db))
-    client = anthropic.Anthropic()
-    summary = {}
+    client = make_backend(args.model, args.endpoint)
+    summary = {"model": args.model}
 
     exemplars = [resolve_paper(spec, args.db) for spec in args.exemplar]
 
