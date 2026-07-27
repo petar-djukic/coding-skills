@@ -64,8 +64,9 @@ RUN="pixi run --manifest-path <skill>/../../pixi.toml python"
 ```
 
 This supplies PyYAML and the `anthropic` package, so no `pip install` is
-needed. `match_structure.py` still needs `ANTHROPIC_API_KEY` (or an active
-`ant auth login`) at run time — pixi manages packages, not secrets.
+needed. The default model (`gemma4:12b`) needs only a running Ollama server.
+Pass `--model claude-opus-4-8` to use the Anthropic API instead (needs
+`ANTHROPIC_API_KEY` or an active `ant auth login`).
 
 ## The workflow (interactive)
 
@@ -165,13 +166,17 @@ corpus" (omit `--baseline`).
 ## Headless mode
 
 `match_structure.py` runs every mode without an interactive session, assembling
-prompts from this skill's own `references/` files (single source of truth)
-and calling `claude-opus-4-8` with adaptive thinking and streaming. Stable
-content blocks (corpus, blueprint) are prompt-cached.
+prompts from this skill's own `references/` files (single source of truth).
+By default it uses `gemma4:12b` via Ollama (matching `match-voice` and
+`tighten-style`); pass `--model claude-opus-4-8` to use the Anthropic API
+with adaptive thinking and streaming.
 
 ```bash
-# Compare a draft against the corpus profile (one API call)
+# Compare a draft against the corpus profile (default: gemma4:12b via Ollama)
 $RUN <skill>/scripts/match_structure.py <draft.md> --db <db-path>
+
+# Same, but using Claude (needs ANTHROPIC_API_KEY)
+$RUN <skill>/scripts/match_structure.py <draft.md> --db <db-path> --model claude-opus-4-8
 
 # Extract a blueprint from exemplars (one call each + synthesis)
 $RUN <skill>/scripts/match_structure.py --db <db-path> \
@@ -191,9 +196,14 @@ paper with the original draft as baseline; flagged passages are listed in
 the JSON summary and a warning is printed. Reports land in
 `<db-dir>/voice-reports/`; usage stats print to stdout.
 
-Requires `ANTHROPIC_API_KEY` (or an active `ant auth login` profile) at run
-time; the `anthropic` package itself comes from the pixi environment. Suitable
-for CI, cron, or a mage target.
+Rewrite guardrails (GH-265): bibliography sections and reference-list lines
+(`[N] ...`) pass through untouched. The model is instructed to return the
+same paragraph count per section; a mismatch keeps the original. Bold
+formatting the model added that the original did not have is stripped.
+
+A `claude-*` model is fine for *analysis* (blueprint extraction, comparison
+reports) — that output never lands in the article. The default matters for
+`--rewrite`, whose output does. Suitable for CI, cron, or a mage target.
 
 ## Exemplar sources
 
@@ -202,13 +212,19 @@ Two sources of exemplars are accepted:
 - **`references.yaml` corpus** (default) — the papers fetched by
   `update-references`, selected with `--db`.
 - **`writing-voice/manifest.yaml`** — a curated exemplar directory carried by
-  the repository (contract: the repository's writing-voice rule; roles
-  `author-voice` / `venue-voice`). Use it when a repository has no fetched
-  corpus, or when the target voice is the author's own prior work rather than
-  a field's literature. Point the profile/compare commands at the exemplar
-  files listed in the manifest (`writing-voice/<file>` per entry, preferring
-  `author-voice`); the metrics and persona extraction are unchanged — only the
-  input set differs.
+  the repository. Pass `--voice-dir <path>` to use it as the corpus source
+  instead of `--db`. Filtering flags: `--role author-voice|venue-voice`,
+  `--anchor-tags <comma-separated>`, `--stratum pre-ai|ai-era`. Use it when a
+  repository has no fetched corpus, or when the target voice is the author's
+  own prior work rather than a field's literature.
+
+  ```bash
+  match_structure.py draft.md --rewrite --voice-dir writing-voice/ \
+    --role author-voice --anchor-tags diction
+  ```
+
+  The same flags work with compare mode; `style.py corpus/compare` are skipped
+  when `--voice-dir` is set since they require `references.yaml`.
 
 filter-tells delegates persona extraction from a `writing-voice/` directory here
 rather than reimplementing it; it uses the directory directly only for its
