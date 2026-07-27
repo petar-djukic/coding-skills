@@ -50,6 +50,7 @@ SECTION_PATTERNS = [
     ("methodology", r"method(?:s|ology)?|approach|model|architecture|design|framework"),
     ("results", r"results?|experiments?|evaluation|empirical|findings|analysis"),
     ("conclusion", r"conclusion|discussion|future\s+work|summary"),
+    ("references", r"references?|bibliography|works\s+cited"),
 ]
 
 STOCK_PHRASES = [
@@ -247,25 +248,40 @@ def frequency_tables(text, top=50):
     }
 
 
-def read_prose(path):
-    """Read a file, returning its prose view. A .tex draft is run through detex
-    so markup does not inflate every token metric; .md is returned as-is."""
+def _strip_front_matter(text):
+    """Remove YAML front matter (--- delimited block at file start)."""
+    if not text.startswith("---"):
+        return text
+    lines = text.split("\n")
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            return "\n".join(lines[i + 1:])
+    return text
+
+
+def read_prose(path, raw=False):
+    """Read a file, returning its prose view.
+
+    Strips YAML front matter by default so metrics are comparable with the rest
+    of the prose stack (md_paragraphs, pangram_report, tighten). Pass raw=True
+    to include front matter (whole-file stats).
+    """
     with open(path) as f:
         text = f.read()
     if path.endswith(".tex"):
-        # One detex, at the shared scripts root (GH-196). This skill carried a
-        # third byte-identical copy until the rename pass found it.
         _shared = os.path.normpath(os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
         if _shared not in sys.path:
             sys.path.insert(0, _shared)
         import detex
         text = detex.detex(text)[0]
+    elif not raw:
+        text = _strip_front_matter(text)
     return text
 
 
-def profile_file(path):
-    text = read_prose(path)
+def profile_file(path, raw=False):
+    text = read_prose(path, raw=raw)
     sections = detect_sections(text)
     per_section = {}
     for name, sec_text in sections.items():
@@ -313,6 +329,30 @@ def select_corpus(db_path, include_all=False):
         md_abs = os.path.join(db_dir, md_rel)
         if os.path.exists(md_abs):
             out.append((e, md_abs))
+    return out
+
+
+def select_voice_corpus(voice_dir, role=None, tags=None, pre_ai=None):
+    """Return list of (entry, absolute md path) from a writing-voice manifest.
+
+    Same return shape as select_corpus so callers can dispatch on either source.
+    """
+    import voice_anchors as va
+    exemplars = va.load_manifest(voice_dir)
+    want = {t.strip().lower() for t in (tags or []) if t.strip()}
+    out = []
+    for ex in exemplars:
+        if role and ex.get("role") != role:
+            continue
+        if pre_ai is not None and va.is_pre_ai(ex) != pre_ai:
+            continue
+        if want:
+            have = {str(x).lower() for x in (ex.get("tags") or [])}
+            if not (want & have):
+                continue
+        p = os.path.join(voice_dir, ex.get("file", ""))
+        if os.path.exists(p):
+            out.append((ex, p))
     return out
 
 
@@ -561,7 +601,7 @@ def similarity_report(subject_text, against, n=8, baseline_text=None):
 # --------------------------------------------------------------------------- #
 
 def cmd_profile(args):
-    profiles = [profile_file(f) for f in args.files]
+    profiles = [profile_file(f, raw=args.raw) for f in args.files]
     out = profiles[0] if len(profiles) == 1 else profiles
     print(json.dumps(out, indent=2, ensure_ascii=False))
 
@@ -629,6 +669,8 @@ def main():
 
     pr = sub.add_parser("profile", help="profile one or more markdown files")
     pr.add_argument("files", nargs="+")
+    pr.add_argument("--raw", action="store_true",
+                    help="include YAML front matter in metrics (default: strip it)")
     pr.set_defaults(func=cmd_profile)
 
     co = sub.add_parser("corpus", help="aggregate corpus profile, write voice-profile.json")

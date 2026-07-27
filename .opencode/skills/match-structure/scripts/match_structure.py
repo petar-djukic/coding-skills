@@ -25,8 +25,10 @@ Usage:
     match_structure.py DRAFT.md --rewrite                # rewrite w/ latest blueprint
     match_structure.py DRAFT.md --exemplar P1 --rewrite  # extract + rewrite
 
-Requires: ANTHROPIC_API_KEY (or an active `ant auth login` profile),
-the `anthropic` package, and PyYAML.
+Requires: PyYAML and an Ollama server for the default model (gemma4:12b).
+Pass --model claude-opus-4-8 to use the Anthropic API instead (needs
+ANTHROPIC_API_KEY or an active `ant auth login` profile, and the
+`anthropic` package).
 """
 
 import argparse
@@ -38,18 +40,15 @@ import subprocess
 import sys
 from datetime import date
 
-try:
-    import anthropic
-except ImportError:
-    sys.exit("The anthropic package is required. Install with: python3 -m pip install --user anthropic")
-
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STYLE_PY = os.path.join(SKILL_DIR, "scripts", "style.py")
+MATCH_VOICE = os.path.normpath(os.path.join(SKILL_DIR, "..", "match-voice", "scripts"))
 ANALYSIS_MD = os.path.join(SKILL_DIR, "references", "voice-analysis-instructions.md")
 APPLICATION_MD = os.path.join(SKILL_DIR, "references", "style-application-instructions.md")
 REPORT_TEMPLATE = os.path.join(SKILL_DIR, "references", "comparison-report-template.md")
 
-MODEL = "claude-opus-4-8"
+DEFAULT_MODEL = os.environ.get("MATCH_VOICE_MODEL", "gemma4:12b")
+DEFAULT_ENDPOINT = os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434")
 MAX_EXCERPT_CHARS = 12000          # per paper in comparison mode
 MAX_CORPUS_CHARS = 350000          # ~100K tokens
 FEWSHOT_CHARS = 2500               # per exemplar excerpt in rewrite prompts
@@ -58,6 +57,8 @@ sys.path.insert(0, os.path.dirname(STYLE_PY))
 import style  # noqa: E402  (section detection, corpus selection, similarity)
 
 NUMBER_RE = re.compile(r"\d+(?:\.\d+)?%?")
+BIBLIO_LINE_RE = re.compile(r"^\[\d+\]\s", re.MULTILINE)
+BOLD_RE = re.compile(r"(\*\*|__)(?=\S)(.+?)(?<=\S)\1", re.DOTALL)
 
 
 # --------------------------------------------------------------------------- #
@@ -69,10 +70,23 @@ def read(path):
         return f.read()
 
 
-def call_model(client, system, content_blocks, max_tokens=16000):
-    """One streamed API call; system may be a string or content-block list."""
+def _is_claude(model):
+    return model.startswith("claude-")
+
+
+def _get_anthropic_client():
+    try:
+        import anthropic
+    except ImportError:
+        sys.exit("The anthropic package is required for claude-* models. "
+                 "Install with: python3 -m pip install --user anthropic")
+    return anthropic.Anthropic()
+
+
+def _call_claude(client, model, system, content_blocks, max_tokens=16000):
+    """One streamed Anthropic API call."""
     with client.messages.stream(
-        model=MODEL,
+        model=model,
         max_tokens=max_tokens,
         thinking={"type": "adaptive"},
         system=system,
@@ -83,6 +97,35 @@ def call_model(client, system, content_blocks, max_tokens=16000):
     if not text.strip():
         sys.exit(f"Empty response (stop_reason: {response.stop_reason})")
     return text, response.usage
+
+
+def _call_ollama(endpoint, model, system, content_blocks):
+    """One Ollama generation call, matching the interface call_model uses."""
+    if MATCH_VOICE not in sys.path:
+        sys.path.insert(0, MATCH_VOICE)
+    import rewrite as rw
+    sys_text = system if isinstance(system, str) else "\n\n".join(
+        b["text"] for b in system if b.get("type") == "text")
+    user_text = "\n\n".join(
+        b["text"] for b in content_blocks if b.get("type") == "text")
+    prompt = f"{sys_text}\n\n{user_text}"
+    text = rw.generate(prompt, endpoint=endpoint, model=model,
+                       temperature=0.7, timeout=600)
+    if not text or not text.strip():
+        sys.exit("Empty response from Ollama")
+
+    class _Usage:
+        output_tokens = len(text.split()) * 2  # rough estimate
+    return text.strip(), _Usage()
+
+
+def call_model(backend, system, content_blocks, max_tokens=16000):
+    """Dispatch to Claude or Ollama based on backend config."""
+    if backend["type"] == "claude":
+        return _call_claude(backend["client"], backend["model"],
+                            system, content_blocks, max_tokens)
+    return _call_ollama(backend["endpoint"], backend["model"],
+                        system, content_blocks)
 
 
 def resolve_paper(spec, db_path):
@@ -137,7 +180,7 @@ def split_document(text):
 # Blueprint extraction (--exemplar)
 # --------------------------------------------------------------------------- #
 
-def extract_blueprint(client, exemplars, db_dir, name=None):
+def extract_blueprint(backend, exemplars, db_dir, name=None):
     """Two-stage extraction. exemplars: list of (id, path). Returns blueprint path."""
     instructions = read(ANALYSIS_MD)
     usage_notes = []
@@ -158,7 +201,7 @@ def extract_blueprint(client, exemplars, db_dir, name=None):
             "cache_control": {"type": "ephemeral"},
         }]
         print(f"Extracting style from {ex_id}...", file=sys.stderr)
-        mini, usage = call_model(client, system, content)
+        mini, usage = call_model(backend, system, content)
         minis.append((ex_id, mini))
         usage_notes.append({"call": f"extract:{ex_id}",
                             "output_tokens": usage.output_tokens})
@@ -182,7 +225,7 @@ def extract_blueprint(client, exemplars, db_dir, name=None):
         )
         print(f"Synthesizing blueprint from {len(minis)} exemplars...",
               file=sys.stderr)
-        merged, usage = call_model(client, system,
+        merged, usage = call_model(backend, system,
                                    [{"type": "text", "text": joined}])
         ids = ", ".join(ex_id for ex_id, _ in minis)
         blueprint = (f"---\nexemplars: [{ids}]\ndate: {date.today()}\n---\n\n"
@@ -244,7 +287,33 @@ def verify_section(original, rewritten):
     }
 
 
-def rewrite_draft(client, draft_path, blueprint_path, source_papers, mimic):
+def _count_paragraphs(text):
+    """Count non-empty paragraph blocks separated by blank lines."""
+    return sum(1 for p in re.split(r"\n\s*\n", text.strip()) if p.strip())
+
+
+def _strip_added_bold(original, rewritten):
+    """Remove bold spans the model added that the original did not have."""
+    orig_bold = len(BOLD_RE.findall(original))
+    new_bold = len(BOLD_RE.findall(rewritten))
+    if new_bold > orig_bold:
+        return BOLD_RE.sub(r"\2", rewritten)
+    return rewritten
+
+
+def _is_passthrough(chunk):
+    """Sections that should never be sent to the model."""
+    if chunk["section"] in ("front", "references"):
+        return True
+    body = chunk["body"].strip()
+    if len(body) < 200:
+        return True
+    if BIBLIO_LINE_RE.search(body):
+        return True
+    return False
+
+
+def rewrite_draft(backend, draft_path, blueprint_path, source_papers, mimic):
     """Section-by-section rewrite. Returns (out_path, verification, out_tokens)."""
     draft_text = read(draft_path)
     blueprint = read(blueprint_path)
@@ -259,7 +328,9 @@ def rewrite_draft(client, draft_path, blueprint_path, source_papers, mimic):
     system = [{
         "type": "text",
         "text": (f"{application}\n\n{mimic_note}\n\n"
-                 f"# Voice blueprint\n\n{blueprint}"),
+                 f"# Voice blueprint\n\n{blueprint}\n\n"
+                 "CRITICAL: Do not add bold (**) formatting that the "
+                 "original does not have."),
         "cache_control": {"type": "ephemeral"},
     }]
 
@@ -270,10 +341,11 @@ def rewrite_draft(client, draft_path, blueprint_path, source_papers, mimic):
 
     for idx, chunk in enumerate(chunks):
         body = chunk["body"]
-        if chunk["section"] == "front" or len(body.strip()) < 200:
+        if _is_passthrough(chunk):
             rewritten_parts.append((chunk["heading"] or "") + body)
             continue
 
+        orig_para_count = _count_paragraphs(body)
         excerpts = fewshot_excerpts(source_papers, chunk["section"])
         excerpt_block = "\n\n".join(
             f"### Style demonstration ({ex_id}, {chunk['section']}) — do NOT reuse its phrasing\n\n{text}"
@@ -285,15 +357,25 @@ def rewrite_draft(client, draft_path, blueprint_path, source_papers, mimic):
                      f"{excerpt_block}\n\n"
                      f"# Draft section to rewrite (type: {chunk['section']})\n\n"
                      f"{body}\n\n"
-                     "Rewrite this section now, following the critical rules. "
+                     f"Rewrite this section now, following the critical rules. "
+                     f"Return exactly {orig_para_count} paragraphs. "
                      "Output only the rewritten section body."),
         }]
         print(f"Rewriting section {idx}: {chunk['section']}...", file=sys.stderr)
-        new_body, usage = call_model(client, system, content)
+        new_body, usage = call_model(backend, system, content)
         total_out += usage.output_tokens
 
+        new_body = _strip_added_bold(body, new_body.strip())
+        new_para_count = _count_paragraphs(new_body)
+        if new_para_count != orig_para_count:
+            print(f"  section {idx}: paragraph count mismatch "
+                  f"({orig_para_count} -> {new_para_count}), keeping original",
+                  file=sys.stderr)
+            rewritten_parts.append((chunk["heading"] or "") + body)
+            continue
+
         heading = (chunk["heading"] + "\n") if chunk["heading"] else ""
-        rewritten_parts.append(f"{heading}\n{new_body.strip()}\n")
+        rewritten_parts.append(f"{heading}\n{new_body}\n")
 
         key = f"{idx}:{chunk['section']}"
         verification[key] = verify_section(body, new_body)
@@ -331,16 +413,26 @@ def excerpt_paper(path, section_texts):
     return "\n\n".join(parts)[:MAX_EXCERPT_CHARS]
 
 
-def load_corpus(db_path):
-    corpus = style.select_corpus(db_path)
-    if not corpus:
-        sys.exit("No corpus papers found (need status: summarized entries "
-                 f"with md_path in {db_path}). Run update-references first.")
+def load_corpus(db_path, voice_dir=None, role=None, tags=None, pre_ai=None):
+    if voice_dir:
+        tag_list = [t.strip() for t in tags.split(",")] if tags else None
+        corpus = style.select_voice_corpus(voice_dir, role=role,
+                                           tags=tag_list, pre_ai=pre_ai)
+        if not corpus:
+            sys.exit(f"No exemplars found in {voice_dir}/manifest.yaml "
+                     f"matching role={role}, tags={tags}, stratum={pre_ai}")
+    else:
+        corpus = style.select_corpus(db_path)
+        if not corpus:
+            sys.exit("No corpus papers found (need status: summarized entries "
+                     f"with md_path in {db_path}). Run update-references first.")
     blocks, total = [], 0
     for entry, md_path in corpus:
+        label = entry.get("id") or os.path.basename(md_path)
+        title = entry.get("title") or entry.get("notes") or ""
         text = read(md_path)
         excerpt = excerpt_paper(md_path, style.detect_sections(text))
-        block = f"## Corpus paper: {entry.get('id')} — {entry.get('title', '')}\n\n{excerpt}"
+        block = f"## Corpus paper: {label} — {title}\n\n{excerpt}"
         if total + len(block) > MAX_CORPUS_CHARS:
             break
         blocks.append(block)
@@ -348,10 +440,17 @@ def load_corpus(db_path):
     return "\n\n---\n\n".join(blocks), len(blocks)
 
 
-def run_compare(client, args, db_dir):
-    run_style(["--db", args.db, "corpus"])
-    metric_diff = run_style(["--db", args.db, "compare", args.draft])
-    corpus_block, n_papers = load_corpus(args.db)
+def run_compare(backend, args, db_dir):
+    if not args.voice_dir:
+        run_style(["--db", args.db, "corpus"])
+        metric_diff = run_style(["--db", args.db, "compare", args.draft])
+    else:
+        metric_diff = "{}"
+    pre_ai = (True if args.stratum == "pre-ai"
+              else False if args.stratum == "ai-era" else None)
+    corpus_block, n_papers = load_corpus(
+        args.db, voice_dir=args.voice_dir, role=args.role,
+        tags=args.anchor_tags, pre_ai=pre_ai)
     print(f"Corpus: {n_papers} papers; comparing {args.draft}", file=sys.stderr)
 
     system = (
@@ -370,7 +469,7 @@ def run_compare(client, args, db_dir):
                   f"# Draft to compare\n\n{read(args.draft)}\n\n"
                   f"Today's date: {date.today()}. Write the comparison report now.")},
     ]
-    report, usage = call_model(client, system, content)
+    report, usage = call_model(backend, system, content)
 
     stem = os.path.splitext(os.path.basename(args.draft))[0]
     out_path = args.out or os.path.join(db_dir, "voice-reports", f"{stem}-voice.md")
@@ -397,6 +496,21 @@ def main():
                    help="blueprint to apply (default: most recent voice-blueprint-*.md, else voice-profile.md)")
     p.add_argument("--mimic", action="store_true",
                    help="also apply single-author idiosyncrasies")
+    p.add_argument("--model", default=DEFAULT_MODEL,
+                   help="model for generation (claude-* uses Anthropic API, "
+                        "anything else uses Ollama)")
+    p.add_argument("--endpoint", default=DEFAULT_ENDPOINT,
+                   help="Ollama endpoint (ignored for claude-* models)")
+    p.add_argument("--voice-dir", default=None,
+                   help="writing-voice directory (alternative to --db)")
+    p.add_argument("--role", default=None,
+                   choices=["author-voice", "venue-voice"],
+                   help="filter voice corpus by role")
+    p.add_argument("--anchor-tags", default=None,
+                   help="comma-separated register tags for voice corpus")
+    p.add_argument("--stratum", default=None,
+                   choices=["pre-ai", "ai-era"],
+                   help="filter voice corpus by era")
     args = p.parse_args()
 
     if not args.draft and not args.exemplar:
@@ -404,15 +518,30 @@ def main():
     if args.rewrite and not args.draft:
         p.error("--rewrite requires a draft")
 
-    db_dir = os.path.dirname(os.path.abspath(args.db))
-    client = anthropic.Anthropic()
+    db_dir = (os.path.abspath(args.voice_dir) if args.voice_dir
+              else os.path.dirname(os.path.abspath(args.db)))
+
+    if _is_claude(args.model):
+        backend = {"type": "claude", "model": args.model,
+                   "client": _get_anthropic_client()}
+    else:
+        if MATCH_VOICE not in sys.path:
+            sys.path.insert(0, MATCH_VOICE)
+        import rewrite as rw
+        ok, msg = rw.check_server(args.endpoint, args.model)
+        if not ok:
+            sys.exit(msg)
+        print(f"model: {msg}", file=sys.stderr)
+        backend = {"type": "ollama", "model": args.model,
+                   "endpoint": args.endpoint}
+
     summary = {}
 
     exemplars = [resolve_paper(spec, args.db) for spec in args.exemplar]
 
     if exemplars:
         blueprint_path, usage_notes = extract_blueprint(
-            client, exemplars, db_dir, name=args.name)
+            backend, exemplars, db_dir, name=args.name)
         summary["blueprint"] = blueprint_path
         summary["extraction_calls"] = usage_notes
         if args.blueprint is None:
@@ -420,10 +549,24 @@ def main():
 
     if args.rewrite:
         blueprint_path = find_blueprint(db_dir, args.blueprint)
-        source_papers = exemplars or [
-            (e.get("id"), path) for e, path in style.select_corpus(args.db)][:3]
+        if exemplars:
+            source_papers = exemplars
+        elif args.voice_dir:
+            pre_ai = (True if args.stratum == "pre-ai"
+                      else False if args.stratum == "ai-era" else None)
+            tag_list = ([t.strip() for t in args.anchor_tags.split(",")]
+                        if args.anchor_tags else None)
+            source_papers = [
+                (e.get("id") or os.path.basename(p), p)
+                for e, p in style.select_voice_corpus(
+                    args.voice_dir, role=args.role, tags=tag_list,
+                    pre_ai=pre_ai)][:3]
+        else:
+            source_papers = [
+                (e.get("id"), path)
+                for e, path in style.select_corpus(args.db)][:3]
         out_path, verification, out_tokens = rewrite_draft(
-            client, args.draft, blueprint_path, source_papers, args.mimic)
+            backend, args.draft, blueprint_path, source_papers, args.mimic)
         summary["rewritten"] = out_path
         summary["blueprint_used"] = blueprint_path
         summary["verification"] = {
@@ -452,7 +595,7 @@ def main():
                   "rewritten draft.", file=sys.stderr)
 
     elif args.draft:
-        summary["compare"] = run_compare(client, args, db_dir)
+        summary["compare"] = run_compare(backend, args, db_dir)
 
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
