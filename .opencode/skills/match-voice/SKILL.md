@@ -166,10 +166,12 @@ register it was meant to avoid (GH-234, idea-factory#355).
 | default — nearest passages, author-voice weighted | none |
 | diction-safe only (exclude AI-era samples) | `--stratum pre-ai` — inert, and reported as such, when the corpus holds no AI-era diction samples |
 | **punch: the pre-AI peer essays** | `--role venue-voice --anchor-tags clipped` |
+| **one specific author's voice** | `--author Yegge` — hard pin, not a weight; empty pool if no exemplars carry that author |
 | see the real selection before spending tokens | `--dry-run` |
 | **register that topic will not find** | `--anchor-tags economics` |
 | shape references, deliberately | `--anchor-tags structure-only` |
 | a specific corpus | `--voice-dir <path>` |
+| no voice steering at all | `--no-anchors` — skips retrieval entirely; contradicts `--role`/`--anchor-tags`/`--stratum` |
 
 The last combination is what a repository README means by "anchor on the Yegge
 and Beck samples". `--stratum pre-ai` alone is often not enough: it removes the
@@ -300,7 +302,33 @@ default; applying them directly is opt-in.
 | Timeout (s) | `--timeout` / `MATCH_VOICE_TIMEOUT` | 300 (cold loads are slow) |
 | Anchors per paragraph | `-k` | 3 |
 | Max copied run (words) | `--max-shared-run` | 8 |
+| Standing style directive | `--style-note` | off |
+| Paragraph selection | `--paragraphs` | all rewritable paragraphs |
 | External check | `--pangram` | off (the flag is the consent) |
+
+`--style-note "active voice, plain diction"` sends a standing directive to
+the rewrite model on every attempt, first included; retries append their
+failure-classified note after it. Use it when a run's register drifts in a
+known direction — the measured case is gpt-oss `--no-anchors` doubling the
+passive rate — and you want to push back without anchors. Recorded in the
+provenance YAML as `style_note`.
+
+`--paragraphs "3,7,12-15"` restricts the rewrite to the listed 1-based
+paragraph indices; everything else passes through untouched (status
+`unselected`). This is the second-pass workflow: a `--pangram` run ends its
+still-flagged worklist with a ready-to-paste `next pass: --paragraphs "..."`
+line, so the paragraphs that stayed flagged can be re-rolled without spending
+model calls on — or risking regressions in — the ones that already cleared.
+An invalid selection (malformed, out of range) exits 2 before any scan or
+model call. The selection is recorded in the provenance YAML.
+
+**Readability guard.** After the register-markers comparison (the `--pangram`
+path), the run prints one WARN line per metric whose relative increase
+crosses its ceiling — passive +50%, nominalization +25%, filler +50% on the
+per-1,000-word rates — or `readability guard: clean`. Advisory only: the
+gate governs fidelity and nothing hard-fails on style drift, but a doubling
+passive rate should not look like a 0.1 uptick. Triggered warnings are
+recorded in the provenance YAML under `guard:`.
 
 ## Did it work? (the --pangram measurement)
 
