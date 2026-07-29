@@ -41,15 +41,21 @@ ACADEMIC = (
     "four nodes, with the delay bound holding in every configuration tested.\n")
 
 
-def corpus(tmp, entries):
-    """entries: [(filename, role, text)] -> writing-voice dir path."""
+def corpus(tmp, entries, extra_fields=None):
+    """entries: [(filename, role, text)] -> writing-voice dir path.
+
+    extra_fields: {filename: {field: value}} for optional manifest fields.
+    """
     d = os.path.join(tmp, "writing-voice")
     os.makedirs(d, exist_ok=True)
     lines = ["exemplars:"]
+    extra = extra_fields or {}
     for name, role, text in entries:
         with open(os.path.join(d, name), "w") as f:
             f.write(text)
         lines += [f"  - id: {name[:-3]}", f"    file: {name}", f"    role: {role}"]
+        for k, v in extra.get(name, {}).items():
+            lines.append(f"    {k}: {v}")
     with open(os.path.join(d, "manifest.yaml"), "w") as f:
         f.write("\n".join(lines) + "\n")
     return d
@@ -89,9 +95,10 @@ def main():
 
         # 4. Every anchor reports score, weighted, and role, so an
         #    inappropriate mix is visible without re-deriving it by hand.
+        #    Default is for_diction=True, so the diction weight applies.
         for c in va.anchors(d, "Ship it.", k=2):
             assert {"score", "weighted", "role", "file", "text"} <= set(c), c
-            expect = round(c["score"] * (va.AUTHOR_VOICE_WEIGHT
+            expect = round(c["score"] * (va.AUTHOR_VOICE_DICTION_WEIGHT
                                          if c["role"] == "author-voice" else 1.0), 4)
             assert abs(c["weighted"] - expect) < 1e-9, c
 
@@ -165,10 +172,29 @@ def main():
         #    every sample — silently ignoring the filter would be worse.
         assert va.sample_paths(tagd, tags=["nonexistent"]) == []
 
-        # 8. Nothing similar returns nothing rather than noise.
+        # 8. Author hard-pins to a named person (GH-301). Case-insensitive,
+        #    and an unrecognised author yields nothing rather than fallback.
+        authd = corpus(os.path.join(tmp, "auth"), [
+            ("yegge.md", "venue-voice", PUNCHY),
+            ("krugman.md", "venue-voice", ACADEMIC),
+        ], extra_fields={
+            "yegge.md": {"author": "Yegge"},
+            "krugman.md": {"author": "Krugman"},
+        })
+        sel = {os.path.basename(p) for p, _ in va.sample_paths(authd, author="Yegge")}
+        assert sel == {"yegge.md"}, sel
+        sel = {os.path.basename(p) for p, _ in va.sample_paths(authd, author="yegge")}
+        assert sel == {"yegge.md"}, "case-insensitive match"
+        assert va.sample_paths(authd, author="Nobody") == [], "unknown author → empty"
+        #    author + pre_ai gate: independent axes compose.
+        got = va.anchors(authd, "Ship it. The tool runs git.", k=3, author="Yegge")
+        assert got and all(
+            os.path.basename(a["file"]) == "yegge.md" for a in got), got
+
+        # 9. Nothing similar returns nothing rather than noise.
         assert va.anchors(d, "zzzz qqqq xxxx", k=3) == []
 
-        # 9. An empty corpus is a normal state, not a crash.
+        # 10. An empty corpus is a normal state, not a crash.
         assert va.anchors(corpus(os.path.join(tmp, "empty"), []), "anything") == []
 
         print("test_voice_anchors: all assertions passed (no network)")

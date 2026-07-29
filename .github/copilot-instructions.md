@@ -218,6 +218,18 @@ Order matters. A reader who scans only the first three sections should understan
 - **Active voice, present tense.** "The harness compares outputs" not "Outputs are compared by the harness."
 - **Concrete over abstract.** Prefer "123 Unix utilities" over "a large number of tools." Prefer "runs both binaries with identical inputs and compares stdout byte-for-byte" over "performs comprehensive testing."
 
+# Response Style
+
+Default to cliffnotes. Give the shortest answer that covers the decision or finding — three lines over six paragraphs. If I need the long version I will ask. This applies to explanations, status updates, and plans. It does not apply to generated prose (articles, drafts) where length is set by the content.
+
+Do not explain why you made a mistake. Fix it and move on. No self-reflection, no "I apologize for the confusion," no paragraph about what you misunderstood. The correction is the only useful part.
+
+## Skill execution
+
+When a slash command or skill is loaded, execute its phases in order. Do not skip ahead. Do not do work that belongs to a later phase or a different skill. If a phase says to stop and report, stop and report — do not continue into the next phase unprompted. If a phase says to run another skill, run that skill — do not inline its work.
+
+Merging a PR and cleaning up the worktree are steps, not suggestions. When Phase 5 conditions are met, complete Phase 5.
+
 # The `.secrets/` Directory Contract
 
 API credentials belong to the repository you are working in, never to the
@@ -693,6 +705,8 @@ The contract is generic — the same layout works in any repository.
 writing-voice/
   manifest.yaml                 the contract below
   <Author>-<Year>-<slug>.md     one markdown file per exemplar
+  blueprints/<name>.md          structural blueprints for match-outline (optional)
+  venues/<name>.yaml            venue profiles, schema below (optional)
   .voice-profile.json           generated cache (gitignorable)
 ```
 
@@ -716,6 +730,7 @@ exemplars:
   - id: djukic-2007-icc-distributed-scheduling   # stable key
     file: Djukic-2007-distributed-link-scheduling-...md   # relative to writing-voice/
     role: author-voice                            # author-voice | venue-voice
+    author: Djukic                                # optional; used by --author
     venue: IEEE ICC
     year: 2007
     source: papers/Djukic-2007-...md              # where the sample came from
@@ -723,9 +738,11 @@ exemplars:
       problem statement, simulation-backed claims.
 ```
 
-Required per exemplar: `id`, `file`, `role`. `venue`, `year`, `source`, and
-`notes` are recommended — `notes` is read by humans choosing exemplars and by
-the anchor-retrieval step when ranking ties.
+Required per exemplar: `id`, `file`, `role`. `venue`, `year`, `source`,
+`author`, and `notes` are recommended — `author` is the person who wrote the
+piece (used by `--author` to hard-pin retrieval to one writer's voice), and
+`notes` is read by humans choosing exemplars and by the anchor-retrieval step
+when ranking ties.
 
 ## Two independent axes
 
@@ -799,6 +816,31 @@ moved the score not at all and nearly doubled passive. The tag arm rewrote
 Articles usually carry the query already — front matter `tags:`, and in some
 repositories `Altitude:` / `Move:` from `pattern-language.yaml`.
 
+## The fourth axis: author identity
+
+`role` says whose voice *category* a sample belongs to; it does not say which
+*person* wrote it. A `venue-voice` pool mixes many authors, and `--role
+venue-voice` returns them all. `author` says **which specific person** wrote
+the piece, and `--author Yegge` hard-pins retrieval to that person's
+exemplars regardless of role.
+
+```yaml
+- id: yegge-2011-google-platforms-rant
+  file: Yegge-2011-stevey-s-google-platforms-rant.md
+  role: venue-voice
+  author: Yegge
+  year: 2011
+```
+
+The `pre_ai` gate still applies: `--author Yegge` selects Yegge's samples,
+and `--stratum pre-ai` further restricts to the ones safe for diction
+anchoring. The axes are independent — author picks WHO, stratum governs
+WHETHER their words are safe to copy.
+
+`--author` that matches nothing yields an empty pool, not a fallback to the
+full corpus. An author value that excludes nothing (every exemplar carries
+that author) is reported as inert.
+
 ## Roles and precedence
 
 `author-voice` is the voice to match; `venue-voice` supplies genre convention
@@ -811,15 +853,88 @@ A tool given a file walks up from that file's directory to the repository root
 looking for `writing-voice/`. Absent, behavior is unchanged — voice features
 are additive, never required.
 
+## `venues/` — venue profiles
+
+A profile is one YAML file under `writing-voice/venues/` bundling every choice
+the humanize pipeline otherwise asks for interactively. One profile per
+publishing venue the repository writes for. Discovery follows the same walk-up
+rule as `writing-voice/` itself, so a paper repository carrying its own
+`writing-voice/venues/academic.yaml` resolves without cross-repo
+configuration.
+
+Profiles are **named bundles, not a linear dial**. Register axes do not move
+together across venues — the book profile removes all hedging while the
+academic profile carries the most — so consumers read fields, never infer
+them from `level`.
+
+```yaml
+name: newsletter          # must match the filename stem
+level: 1                  # 1 newsletter | 2 technical-essay | 3 book
+                          # 4 industry-report | 5 academic — ordering label only
+description: >
+  Substack posts: first person, coaching voice, punch anchors.
+anchor_query:             # manifest query for voice anchors
+  role: venue-voice       # optional: author-voice | venue-voice
+  tags: [first-person, clipped]
+  stratum: pre-ai         # optional: pre-ai | ai-era
+  author: Yegge           # optional hard pin
+blueprint: evans-howto.md # under blueprints/, or omit
+structural_step: tighten-style   # match-outline | tighten-style | skip
+pov: first-person         # first-person | third-person | mixed-sidebars
+citations: numbered       # numbered | pandoc | none
+tell_lexicon: newsletter  # newsletter | academic | industry | book | none
+hedge_policy: minimal     # zero (book) | minimal (essay) | calibrated (academic)
+targets:                  # measured register targets; keys are match-structure
+  sentence_length_mean: 17.4        # METRIC_KEYS — bootstrap them with
+  passive_per_100_sentences: 4.1    # `style.py corpus` over the venue slice,
+  hedges_per_1000_words: 1.2        # never hand-write them
+targets_provenance:
+  measured: '2026-07-29'
+  corpus: {role: venue-voice, tags: [first-person, clipped]}
+  papers: 24
+gates:                    # ordered acceptance checks with optional thresholds
+  - name: pangram
+    max_ai_fraction: 0.5
+  - name: pace
+  - name: register-composite
+  - name: citation-number-preservation
+  - name: audit-references
+provenance:               # written back by tune-anchors after a sweep
+  anchor_query_source: tune-anchors   # or: hand
+  swept: '2026-07-29'
+  composite: 0.81
+```
+
+Required: `name`, `level`, `structural_step`, `citations`, `tell_lexicon`,
+`hedge_policy`, `gates`. Loader and validator:
+`match-structure/scripts/venue_profile.py` (`discover` / `list` / `show` /
+`validate`); consumer skills import `resolve()` or shell out to `show`.
+A profile with schema errors is refused, not partially applied.
+
+Field semantics for consumers:
+
+- `anchor_query` / `blueprint` / `structural_step` — resolve humanize Phase-0
+  choices (humanize `--venue`).
+- `tell_lexicon` — selects which venue lexicon filter-tells applies on top of
+  its core tells; core tells are venue-independent.
+- `targets` + `hedge_policy` — tighten-style tightens toward these numbers
+  instead of the global author floor; hedge handling is venue-keyed.
+- `gates` — which acceptance checks run and in what order; a venue without
+  `pangram` in its gate list is never uploaded to an external detector
+  (the consent rule below still governs every upload for venues that do).
+- `citations` — pandoc `[@citekey]` and numbered `[1]` markers must survive
+  every rewrite step verbatim.
+
 ## Consumers
 
 - **filter-tells** — builds a baseline profile from the samples (metrics reported as
   distances from it, not only against fixed thresholds) and injects
   topically-nearest exemplar passages into rewrite and overshoot prompts as
   voice anchors.
-- **match-structure** — accepts the manifest as a curated exemplar source, so a
-  repository without a `references.yaml` corpus can still use persona
-  extraction and comparison.
+- **match-outline** — accepts the manifest as a curated exemplar source for
+  whole-document structural rewriting, blueprint synthesis, and comparison.
+- **match-structure** — provides the quantitative metrics, corpus aggregation,
+  and voice anchor retrieval that match-outline and other skills import.
 - **match-voice** — retrieves the same anchors and sends them with the
   paragraph to a second model family, then gates the candidate on citation and
   number preservation, meaning entailment, anchor similarity, and register. Its

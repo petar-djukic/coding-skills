@@ -9,10 +9,10 @@ The driver applies the MECHANICAL gate only. Meaning entailment is a judgment
 call and stays with the reviewing model (references/prompts.md); the emitted
 draft is a set of candidates, not an accepted result.
 
-Paragraph extraction and the coverage audit come from md_paragraphs.py, the
-canonical extractor shared by the prose skills: every body line is classified
-(prose / heading / figure / table / code / reference / blockquote / list / rule
-/ blank), and a nonempty unaccounted list means the parser skipped prose.
+Paragraph extraction uses ProseDocument (prose_document.py), which dispatches
+on file extension: markdown files use md_paragraphs.py internally, YAML files
+use ruamel.yaml. The to_parse_result() adapter preserves the tuple shape the
+driver expects.
 
 With --pangram the driver also measures whether the rewrite worked, scanning
 the article before it starts and the draft when it finishes (GH-212). The
@@ -64,18 +64,16 @@ def run(cmd, **kw):
                           errors="replace", **kw)
 
 
-def _md_paragraphs():
-    """One canonical extractor (GH-167), at the shared scripts root (GH-196):
-    a block this driver treats as prose is the same block the metrics and the
-    anchors see."""
+def _prose_document():
+    """ProseDocument factory — handles both markdown and YAML files."""
     sibling = os.path.normpath(os.path.join(SK, "..", "..", "..", "scripts"))
     if sibling not in sys.path:
         sys.path.insert(0, sibling)
     try:
-        import md_paragraphs
-        return md_paragraphs
+        import prose_document
+        return prose_document
     except ImportError as e:
-        sys.exit(f"could not import md_paragraphs.py from {sibling}: {e}")
+        sys.exit(f"could not import prose_document.py from {sibling}: {e}")
 
 
 def pangram_scan(path, work, tag):
@@ -149,12 +147,46 @@ def report_structural(article, draft):
         print(f"  {k:26} {b:>6} -> {a:<6}{'  WORSE' if worse else ''}")
 
 
+# Relative-increase ceilings, article -> draft, on per_1000 rates. Advisory:
+# the gate governs fidelity; nothing hard-fails a run for style drift. The
+# calibrating case is gpt-oss --no-anchors doubling passives (4.1 -> 8.6),
+# which the plain UP arrow reported identically to a 0.1 uptick (GH-324).
+GUARD_THRESHOLDS = {"passive": 0.50, "nominalization": 0.25, "filler": 0.50}
+# A metric rising from zero has no relative increase; warn only when the
+# draft's rate is visible on its own.
+GUARD_ZERO_FLOOR = 2.0
+
+
+def readability_guard(before_per_1000, after_per_1000):
+    """WARN records for register metrics that degraded past their threshold."""
+    warns = []
+    for metric, limit in GUARD_THRESHOLDS.items():
+        b, a = before_per_1000.get(metric), after_per_1000.get(metric)
+        if b is None or a is None or a <= b:
+            continue
+        if b == 0:
+            if a >= GUARD_ZERO_FLOOR:
+                warns.append({"metric": metric, "before": b, "after": a,
+                              "rise_pct": None,
+                              "threshold_pct": round(limit * 100)})
+            continue
+        rise = (a - b) / b
+        if rise > limit:
+            warns.append({"metric": metric, "before": b, "after": a,
+                          "rise_pct": round(rise * 100, 1),
+                          "threshold_pct": round(limit * 100)})
+    return warns
+
+
 def report_register(article, draft):
     """Register markers before -> after, via the shared reporter (GH-222).
 
     One marker vocabulary everywhere: the numbers in issues and the numbers in
     run output are the same numbers. A falling AI score with rising markers is
     the GH-219/GH-220 failure — the objective met, the prose worse.
+
+    Returns the readability-guard warnings (GH-324) so the manifest records
+    them; [] when clean or when the markers cannot be read.
     """
     r = run([sys.executable, os.path.join(SHARED, "register_markers.py"),
              "--compare", article, draft])
@@ -163,10 +195,34 @@ def report_register(article, draft):
         print(r.stdout.rstrip())
         if r.stderr.strip():
             print(r.stderr.rstrip(), file=sys.stderr)
+    j = run([sys.executable, os.path.join(SHARED, "register_markers.py"),
+             "--compare", article, draft, "--json"])
+    if j.returncode != 0 or not j.stdout.strip():
+        return []
+    try:
+        data = json.loads(j.stdout)
+    except json.JSONDecodeError:
+        return []
+    warns = readability_guard(data.get("before", {}).get("per_1000", {}),
+                              data.get("after", {}).get("per_1000", {}))
+    if warns:
+        print("readability guard:")
+        for w in warns:
+            rise = "from zero" if w["rise_pct"] is None else f"+{w['rise_pct']}%"
+            print(f"  WARN {w['metric']} {w['before']} -> {w['after']} /1000w "
+                  f"({rise}, threshold +{w['threshold_pct']}%)")
+    else:
+        print("readability guard: clean")
+    return warns
 
 
 def pangram_delta(before, after):
-    """Print fraction_ai before -> after and the still-flagged worklist."""
+    """Print fraction_ai before -> after and the still-flagged worklist.
+
+    The worklist ends with a ready-to-paste --paragraphs selection (GH-322):
+    span order and drive.py paragraph order are the same md_paragraphs
+    segmentation, so the k-th prose paragraph in the diff is paragraph k here.
+    """
     r = run(["python3", PANGRAM_REPORT, "report", "--response", after[0],
              "--spans", after[1], "--baseline", before[0],
              "--baseline-spans", before[1]])
@@ -176,6 +232,56 @@ def pangram_delta(before, after):
         return
     print("\nexternal check (Pangram, article -> draft):")
     print(r.stdout.rstrip())
+    j = run(["python3", PANGRAM_REPORT, "report", "--response", after[0],
+             "--spans", after[1], "--baseline", before[0],
+             "--baseline-spans", before[1], "--json"])
+    if j.returncode != 0 or not j.stdout.strip():
+        return
+    try:
+        diff = json.loads(j.stdout)
+    except json.JSONDecodeError:
+        return
+    flagged = [i + 1 for i, p in enumerate(diff.get("paragraphs") or [])
+               if p.get("flagged")]
+    if flagged:
+        print(f'next pass: --paragraphs "{compress_ranges(flagged)}"')
+
+
+def compress_ranges(indices):
+    """'1,3-5,9' from sorted 1-based indices — the --paragraphs input syntax."""
+    out, i = [], 0
+    idx = sorted(indices)
+    while i < len(idx):
+        j = i
+        while j + 1 < len(idx) and idx[j + 1] == idx[j] + 1:
+            j += 1
+        out.append(str(idx[i]) if i == j else f"{idx[i]}-{idx[j]}")
+        i = j + 1
+    return ",".join(out)
+
+
+def parse_paragraph_selection(spec, total):
+    """Set of 1-based paragraph indices from 'N,M-K' syntax.
+
+    Raises ValueError on malformed pieces, descending ranges, or indices
+    outside 1..total, so the caller can refuse the run before any model call.
+    """
+    chosen = set()
+    for piece in (p.strip() for p in spec.split(",")):
+        if not piece:
+            continue
+        m = re.fullmatch(r"(\d+)(?:-(\d+))?", piece)
+        if not m:
+            raise ValueError(f"malformed paragraph selection: '{piece}'")
+        lo, hi = int(m.group(1)), int(m.group(2) or m.group(1))
+        if lo > hi:
+            raise ValueError(f"descending range: '{piece}'")
+        if lo < 1 or hi > total:
+            raise ValueError(f"'{piece}' outside 1..{total}")
+        chosen.update(range(lo, hi + 1))
+    if not chosen:
+        raise ValueError("empty paragraph selection")
+    return chosen
 
 
 def anchor_flags(a):
@@ -189,6 +295,8 @@ def anchor_flags(a):
         f += ["--stratum", a.stratum]
     if a.anchor_tags:
         f += ["--tags", a.anchor_tags]
+    if a.author:
+        f += ["--author", a.author]
     return f
 
 
@@ -222,14 +330,17 @@ def inert_filters(va, d, a):
     sample is pre-AI). Reported by name, at the point it is applied.
     """
     pre, tags = _selection(a)
-    n = len(va.sample_paths(d, role=a.role, pre_ai=pre, tags=tags))
+    author = getattr(a, "author", None)
+    n = len(va.sample_paths(d, role=a.role, pre_ai=pre, tags=tags, author=author))
     out = []
-    if a.stratum and len(va.sample_paths(d, role=a.role, pre_ai=None, tags=tags)) == n:
+    if a.stratum and len(va.sample_paths(d, role=a.role, pre_ai=None, tags=tags, author=author)) == n:
         out.append(f"stratum={a.stratum}")
-    if a.role and len(va.sample_paths(d, role=None, pre_ai=pre, tags=tags)) == n:
+    if a.role and len(va.sample_paths(d, role=None, pre_ai=pre, tags=tags, author=author)) == n:
         out.append(f"role={a.role}")
-    if tags and len(va.sample_paths(d, role=a.role, pre_ai=pre, tags=None)) == n:
+    if tags and len(va.sample_paths(d, role=a.role, pre_ai=pre, tags=None, author=author)) == n:
         out.append(f"tags={a.anchor_tags}")
+    if author and len(va.sample_paths(d, role=a.role, pre_ai=pre, tags=tags, author=None)) == n:
+        out.append(f"author={author}")
     return out
 
 
@@ -250,7 +361,8 @@ def realized_mix(va, d, a, paras, limit=None):
     chosen = paras if limit is None else paras[:limit]
     roles, sources = Counter(), Counter()
     for _s, _e, txt in chosen:
-        for x in va.anchors(d, txt, k=3, role=a.role, pre_ai=pre, tags=tags):
+        for x in va.anchors(d, txt, k=3, role=a.role, pre_ai=pre, tags=tags,
+                            author=getattr(a, "author", None)):
             roles[x.get("role", "?")] += 1
             sources[x.get("file", "?")] += 1
     return roles, sources, len(chosen), len(paras)
@@ -274,16 +386,18 @@ def anchor_provenance(a, article, paras, full=False):
         return None
     d = a.voice_dir or va.discover(article)
     if not d:
-        print("anchors: no writing-voice/ found — the rewrite has no target "
-              "register; run plain filter-tells instead", file=sys.stderr)
-        return None
+        sys.exit("anchors: no writing-voice/ found — the rewrite has no target "
+                 "register. Use --no-anchors to run without voice steering, or "
+                 "run plain filter-tells instead")
 
     pre, tags = _selection(a)
-    paths = va.sample_paths(d, role=a.role, pre_ai=pre, tags=tags)
+    author = getattr(a, "author", None)
+    paths = va.sample_paths(d, role=a.role, pre_ai=pre, tags=tags, author=author)
     mix = Counter(r for _, r in paths)
     filt = " ".join(x for x in (f"role={a.role}" if a.role else "",
                                 f"stratum={a.stratum}" if a.stratum else "",
-                                f"tags={a.anchor_tags}" if a.anchor_tags else "") if x)
+                                f"tags={a.anchor_tags}" if a.anchor_tags else "",
+                                f"author={author}" if author else "") if x)
     weight = va.AUTHOR_VOICE_DICTION_WEIGHT
     print(f"anchors: {len(paths)} exemplars available from {d}")
     print(f"         pool {dict(mix)}{'  [' + filt + ']' if filt else ''}")
@@ -294,9 +408,9 @@ def anchor_provenance(a, article, paras, full=False):
               f"steering anything on this corpus", file=sys.stderr)
 
     if not paths:
-        print("         NOTHING MATCHES THE FILTER — every rewrite will run "
-              "without anchors", file=sys.stderr)
-        return d
+        sys.exit(f"anchors: NOTHING MATCHES THE FILTER"
+                 f"{'  [' + filt + ']' if filt else ''} — 0 exemplars in pool. "
+                 f"Use --no-anchors to run without voice steering")
     if not paras:
         return d
 
@@ -358,7 +472,7 @@ def _pangram_summary(response_path):
     }
 
 
-def write_manifest(path, a, voice_dir, results, pangram=None):
+def write_manifest(path, a, voice_dir, results, pangram=None, guard=None):
     """Run provenance beside the draft, in the shape a front-matter block wants.
 
     The anchor set is the single most important input to a rewrite — it is what
@@ -381,16 +495,23 @@ def write_manifest(path, a, voice_dir, results, pangram=None):
            "match_voice:",
            f"  model: {_yaml_scalar(a.model)}",
            f"  voice_dir: {_yaml_scalar(voice_dir)}",
+           f"  no_anchors: {str(a.no_anchors).lower()}",
+           f"  anchor_author: {_yaml_scalar(getattr(a, 'author', None))}",
            f"  anchor_role: {_yaml_scalar(a.role)}",
            f"  anchor_tags: [{', '.join(_yaml_scalar(t) for t in tags)}]",
            f"  stratum: {_yaml_scalar(a.stratum)}",
+           f"  style_note: {_yaml_scalar(getattr(a, 'style_note', '') or None)}",
+           f"  paragraphs: {_yaml_scalar(getattr(a, 'paragraphs', '') or None)}",
            "  anchor_files:"]
     out += [f"    - {_yaml_scalar(f)}" for f in anchor_files] or ["    []"]
     out.append("  result: {accepted: %d, kept_original: %d, skipped_short: %d, "
-               "rewrite_error: %d}" % (counts.get("accepted-mechanical", 0),
-                                       counts.get("kept-original", 0),
-                                       counts.get("skipped-short", 0),
-                                       counts.get("rewrite-error", 0)))
+               "rewrite_error: %d, gate_error: %d, unselected: %d}"
+               % (counts.get("accepted-mechanical", 0),
+                  counts.get("kept-original", 0),
+                  counts.get("skipped-short", 0),
+                  counts.get("rewrite-error", 0),
+                  counts.get("gate-error", 0),
+                  counts.get("unselected", 0)))
     if pangram:
         before, after = pangram
         out.append("  pangram:")
@@ -409,8 +530,36 @@ def write_manifest(path, a, voice_dir, results, pangram=None):
                 mws = p['mean_window_score']
                 out.append(f"      mean_window_score: {mws if mws is not None else 'null'}")
                 out.append(f"      num_windows: {p['num_windows']}")
+    if guard:
+        out.append("  guard:")
+        for w in guard:
+            rise = w["rise_pct"] if w["rise_pct"] is not None else "from-zero"
+            out.append(f"    - {{metric: {w['metric']}, before: {w['before']}, "
+                       f"after: {w['after']}, rise_pct: {rise}, "
+                       f"threshold_pct: {w['threshold_pct']}}}")
     open(path, "w").write("\n".join(out) + "\n")
     return anchor_files
+
+
+def compose_note(style_note, failure_note):
+    """The note for one rewrite attempt: standing style directive first,
+    failure-classified retry note after it, either alone when the other is
+    absent, empty string when both are."""
+    return " ".join(p for p in (style_note, failure_note) if p)
+
+
+def classify_gate_crash(returncode, stdout, stderr):
+    """The gate-error record for a verify.py CRASH, or None on the normal path.
+
+    A crash is a missing verdict, not a rejection: verify.py exits nonzero
+    with a JSON verdict when it rejects, and with a traceback and no JSON when
+    it breaks. Treating the two the same shipped no-op runs as successes
+    (GH-318) — every rewrite silently discarded, reason '?'.
+    """
+    if returncode != 0 and not stdout.strip().startswith("{"):
+        return {"status": "gate-error",
+                "err": (stderr or "verify.py produced no verdict").strip()[:200]}
+    return None
 
 
 def restore_full_bold(original, candidate):
@@ -431,10 +580,12 @@ def restore_full_bold(original, candidate):
 def parse_paragraphs(path, min_words):
     """Return (lines, fm_close, paragraphs, coverage, unaccounted).
 
-    Thin wrapper over the canonical extractor; signature preserved so the
-    driver and its --coverage-only output are unchanged.
+    Uses ProseDocument for both markdown and YAML files, with the
+    to_parse_result() adapter for backward-compat tuple shape.
     """
-    r = _md_paragraphs().parse_file(path)
+    pd = _prose_document()
+    doc = pd.ProseDocument.open(path)
+    r = doc.to_parse_result()
     return r.lines, r.fm_close, r.paragraphs, r.coverage, r.unaccounted
 
 
@@ -447,6 +598,15 @@ def main():
     ap.add_argument("--retries", type=int, default=2)
     ap.add_argument("--min-words", type=int, default=12)
     ap.add_argument("--temperature", default="0.7")
+    ap.add_argument("--style-note", default="",
+                    help="standing style directive sent to the rewrite model "
+                         "on EVERY attempt, e.g. 'active voice, plain "
+                         "diction'; retries append their failure note to it")
+    ap.add_argument("--paragraphs", default="",
+                    help="rewrite only these 1-based paragraph indices "
+                         "('3,7,12-15'); the rest pass through untouched. The "
+                         "run report prints the next-pass selection to paste "
+                         "here")
     ap.add_argument("--voice-dir",
                     help="exemplar corpus (default: discover writing-voice/ "
                          "upward from the article)")
@@ -461,6 +621,11 @@ def main():
                          "across roles. Inert on a corpus whose diction-eligible "
                          "samples are all pre-AI — the run says so when it is. "
                          "To steer register, reach for --role/--anchor-tags")
+    ap.add_argument("--author", help="hard pin anchors to a named author "
+                                     "(case-insensitive match against the "
+                                     "exemplar author field)")
+    ap.add_argument("--no-anchors", action="store_true",
+                    help="run without voice anchors; skip retrieval entirely")
     ap.add_argument("--coverage-only", action="store_true",
                     help="parse + coverage audit only; no model calls")
     ap.add_argument("--dry-run", action="store_true",
@@ -475,13 +640,29 @@ def main():
                          "and it is asked for per document. Costs two scans.")
     a = ap.parse_args()
 
+    if a.no_anchors and any([a.role, a.anchor_tags, a.stratum, a.author]):
+        ap.error("--no-anchors contradicts --role/--anchor-tags/--stratum/--author")
+
     art = os.path.abspath(a.article)
     out = a.out or re.sub(r"\.md$", ".vr-draft.md", art)
     lines, fm_close, paras, coverage, unaccounted = parse_paragraphs(art, a.min_words)
+    # Validated before any scan or model call: an invalid selection must cost
+    # nothing.
+    selection = None
+    if a.paragraphs:
+        try:
+            selection = parse_paragraph_selection(a.paragraphs, len(paras))
+        except ValueError as e:
+            print(f"--paragraphs: {e}", file=sys.stderr)
+            sys.exit(2)
     # Long enough to be rewritten is the same bar the loop uses, so the reported
     # selection is the selection the run would actually make.
     rewritable = [p for p in paras if len(p[2].split()) >= a.min_words]
-    voice_dir = anchor_provenance(a, art, rewritable, full=a.dry_run)
+    if a.no_anchors:
+        print("anchors: --no-anchors set, skipping retrieval entirely")
+        voice_dir = None
+    else:
+        voice_dir = anchor_provenance(a, art, rewritable, full=a.dry_run)
 
     from collections import Counter
     cats = Counter(coverage.values())
@@ -497,6 +678,17 @@ def main():
             print(f"  p{n:02d} L{s:>4} {w:>4}w {tag:10} | {txt[:60]}")
         sys.exit(1 if unaccounted else 0)
     if a.dry_run:
+        if a.pangram:
+            work = tempfile.mkdtemp(prefix="match-voice-")
+            print(f"\nexternal check: scanning {os.path.basename(art)}")
+            bl = pangram_scan(art, work, "before")
+            if bl:
+                r = run(["python3", PANGRAM_REPORT, "report",
+                         "--response", bl[0], "--spans", bl[1]])
+                if r.returncode == 0:
+                    print(r.stdout.rstrip())
+            else:
+                print("external check: pangram scan failed", file=sys.stderr)
         print("\ndry run: anchors above are the real selection for every "
               "rewritable paragraph. No model was called and no draft written.")
         sys.exit(1 if unaccounted else 0)
@@ -518,30 +710,39 @@ def main():
         rec = {"n": n, "lines": [s, e], "words": len(txt.split()), "orig": txt}
         if rec["words"] < a.min_words:
             rec["status"] = "skipped-short"; results.append(rec); continue
+        if selection is not None and n not in selection:
+            rec["status"] = "unselected"; results.append(rec); continue
         pf = f"{work}/p{n:02d}.orig.txt"; open(pf, "w").write(txt)
-        rflags = anchor_flags(a)
-        aj = run(["python3", f"{SK}/retrieve.py", "--text", pf, "--for", art,
-                  *rflags, "--json"])
-        at = run(["python3", f"{SK}/retrieve.py", "--text", pf, "--for", art, *rflags])
-        ajf = f"{work}/p{n:02d}.anchors.json"; open(ajf, "w").write(aj.stdout or "[]")
-        # Which exemplars anchored THIS paragraph, with scores, so a bad mix is
-        # diagnosable from results.json instead of by re-running retrieval.
-        try:
-            payload = json.loads(aj.stdout or "[]")
-            recs = payload.get("anchors", payload) if isinstance(payload, dict) else payload
-            rec["anchors"] = [{"file": x.get("file"), "role": x.get("role"),
-                               "score": x.get("score"), "weighted": x.get("weighted")}
-                              for x in recs]
-        except (json.JSONDecodeError, AttributeError, TypeError):
+        if a.no_anchors:
+            ajf = f"{work}/p{n:02d}.anchors.json"; open(ajf, "w").write("[]")
             rec["anchors"] = []
-        atf = f"{work}/p{n:02d}.anchors.txt"; open(atf, "w").write(at.stdout or "")
+            atf = f"{work}/p{n:02d}.anchors.txt"; open(atf, "w").write("")
+        else:
+            rflags = anchor_flags(a)
+            aj = run(["python3", f"{SK}/retrieve.py", "--text", pf, "--for", art,
+                      *rflags, "--json"])
+            at = run(["python3", f"{SK}/retrieve.py", "--text", pf, "--for", art, *rflags])
+            ajf = f"{work}/p{n:02d}.anchors.json"; open(ajf, "w").write(aj.stdout or "[]")
+            try:
+                payload = json.loads(aj.stdout or "[]")
+                recs = payload.get("anchors", payload) if isinstance(payload, dict) else payload
+                rec["anchors"] = [{"file": x.get("file"), "role": x.get("role"),
+                                   "score": x.get("score"), "weighted": x.get("weighted")}
+                                  for x in recs]
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                rec["anchors"] = []
+            atf = f"{work}/p{n:02d}.anchors.txt"; open(atf, "w").write(at.stdout or "")
         note = None
         for attempt in range(1 + a.retries):
             cmd = ["python3", f"{SK}/rewrite.py", "--text", pf, "--anchors", atf,
                    "--model", a.model, "--endpoint", a.endpoint,
                    "--temperature", a.temperature]
-            if note:
-                cmd += ["--retry-note", note]
+            # The standing style note rides on every attempt; a retry's
+            # failure-classified note is appended after it, so neither
+            # displaces the other.
+            sent_note = compose_note(a.style_note, note)
+            if sent_note:
+                cmd += ["--retry-note", sent_note]
             rw = run(cmd)
             if rw.returncode != 0 or not rw.stdout.strip():
                 rec["status"] = "rewrite-error"; rec["err"] = (rw.stderr or "")[:200]
@@ -554,6 +755,10 @@ def main():
             cf = f"{work}/p{n:02d}.cand.txt"; open(cf, "w").write(cand_text)
             vf = run(["python3", f"{SK}/verify.py", "--original", pf, "--rewrite", cf,
                       "--anchors-json", ajf, "--json"])
+            crash = classify_gate_crash(vf.returncode, vf.stdout, vf.stderr)
+            if crash:
+                rec.update(crash)
+                break
             de = run(["bash", DEAI, cf])
             fj = vf.stdout if vf.stdout.strip().startswith("{") else "{}"
             warnings = []
@@ -605,9 +810,16 @@ def main():
             why = ",".join(x.get("check", "?") for x in v.get("findings", [])) \
                 if isinstance(v, dict) else "?"
             print(f"  kept p{r['n']:02d} (L{r['lines'][0]}): {why}")
+        if r["status"] == "gate-error":
+            print(f"  GATE-ERROR p{r['n']:02d} (L{r['lines'][0]}): {r.get('err', '?')}")
         if r.get("warnings"):
             print(f"  advisory p{r['n']:02d} (L{r['lines'][0]}): "
                   f"{','.join(r['warnings'])}")
+    gate_errors = [r for r in results if r["status"] == "gate-error"]
+    if gate_errors:
+        print(f"\nWARNING: the verification gate CRASHED on {len(gate_errors)} "
+              "paragraph(s) — those rewrites were never judged, only discarded. "
+              "Fix the gate before trusting this draft.", file=sys.stderr)
     print("\nMechanical gate only. Before accepting the draft: run the meaning-"
           "entailment review (references/prompts.md) on each accepted paragraph, "
           "and filter-tells over the assembled file.")
@@ -621,6 +833,7 @@ def main():
     # The outcome measure, last because it is the result of the run. Without a
     # baseline there is nothing to compare, so the second scan is not spent.
     pangram_pair = None
+    guard_warns = []
     if not a.pangram:
         print("\nexternal check: skipped (no --pangram). The gate proves the "
               "candidates kept their citations, numbers, and meaning; it cannot "
@@ -634,7 +847,7 @@ def main():
             pangram_delta(baseline, after)
             # Beside the score, never instead of it: the two moving in
             # opposite directions is the whole GH-219 finding.
-            report_register(art, out)
+            guard_warns = report_register(art, out)
             pangram_pair = (_pangram_summary(baseline[0]), _pangram_summary(after[0]))
         else:
             print(f"\nexternal check: the draft scan failed. The baseline stands "
@@ -644,9 +857,19 @@ def main():
     # Last, so it can record the Pangram numbers when there are any. Written
     # beside the draft rather than into the temp dir, which the OS reaps.
     manifest = re.sub(r"\.md$", ".generation.yaml", out)
-    used = write_manifest(manifest, a, voice_dir, results, pangram_pair)
+    used = write_manifest(manifest, a, voice_dir, results, pangram_pair,
+                          guard=guard_warns)
     print(f"\nprovenance: {manifest}")
     print(f"  {len(used)} distinct exemplars anchored this draft")
+
+    # After the manifest, so the forensics survive: when the gate crashed on
+    # every rewritable paragraph, nothing was ever verified and the "draft" is
+    # a copy of the input. Success would present that copy as a rewrite.
+    gated = [r for r in results
+             if r["status"] not in ("skipped-short", "unselected")]
+    if gated and all(r["status"] == "gate-error" for r in gated):
+        sys.exit("gate-error on every paragraph: the verification gate never "
+                 "ran. The draft is an untouched copy — do not use it.")
 
 
 if __name__ == "__main__":

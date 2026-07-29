@@ -38,6 +38,10 @@ a corpus profile. It also provides the similarity plagiarism guard used by
   `style.py corpus`. Regenerate only when the corpus changes.
 - **Voice anchors:** passage-level tf-idf retrieval from `writing-voice/`
   exemplars, via `voice_anchors.py`.
+- **Venue profiles:** `writing-voice/venues/<name>.yaml` — per-venue parameter
+  bundles (anchor query, blueprint, targets, tell lexicon, gates) consumed by
+  humanize/filter-tells/tighten-style. Schema in the `writing-voice` repository
+  rule; loader/validator is `venue_profile.py`.
 
 ## Running the scripts
 
@@ -63,11 +67,24 @@ $RUN <skill>/scripts/voice_anchors.py profile [--voice-dir D | --for file] [--fo
 $RUN <skill>/scripts/voice_anchors.py anchors --text <file>|- [--for file] [-k N] [--role R]
 ```
 
+## venue_profile.py subcommands
+
+```bash
+$RUN <skill>/scripts/venue_profile.py discover <file>            # find venues/ via walk-up
+$RUN <skill>/scripts/venue_profile.py list --for <file>          # available venue names
+$RUN <skill>/scripts/venue_profile.py show --venue N --for <file> # validated profile JSON
+$RUN <skill>/scripts/venue_profile.py validate <profile.yaml>
+```
+
+Python consumers import `venue_profile.resolve(start_path=..., venue=...)`,
+which raises on schema errors — a broken profile is refused, never partially
+applied.
+
 ## Consumers
 
-- **match-outline** — imports `style` for section detection, corpus
-  selection, the similarity guard, and the `CITATION_RE`/`HEADING_RE`
-  patterns.
+- **match-outline** — imports `style` for corpus selection, the similarity
+  guard, and the `CITATION_RE` pattern. Uses `gpt-oss:120b-cloud` via
+  Ollama for whole-document structural rewriting.
 - **match-voice** — imports `style.similarity_report` for the rewrite
   verification gate; imports `voice_anchors` for anchor retrieval.
 - **filter-tells** — consumes `voice-profile.json` as a detector input
