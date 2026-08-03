@@ -34,6 +34,15 @@ mage -l 2>/dev/null || true
 Run the consistency check if one exists (`mage audit`, or `mage analyze` where
 it is named that way) and `mage stats` if present. Summarize the project state.
 
+### Operational-issue detection
+
+If the issue is a release rather than a code/doc change — the title starts with
+`Recurring: Run release push`, or the body contains a `## Release Workflow`
+section or a `mage tag` release recipe — do **not** create a worktree or
+sub-issues. Instead run `/gh-release-push` on `main` (it requires `main` and
+produces no branch or PR). After the release completes, handle recurrence
+(Phase 6) and close the issue. Skip Phases 3–5 entirely.
+
 ## Phase 3 -- Propose sub-issues
 
 Decompose the epic into units, each with: type (documentation or code),
