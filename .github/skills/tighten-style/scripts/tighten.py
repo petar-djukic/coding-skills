@@ -83,6 +83,36 @@ def _sentence_stats(text):
     return mean, var ** 0.5
 
 
+def write_draft(doc, ext, out_lines, tightened, out):
+    """Write accepted candidates into the draft at `out`; return the lines
+    the sentence-floor advisory should measure.
+
+    YAML goes back through the document model (GH-358): ruamel round-trip
+    keeps comments, key order, and structure — raw line splicing would drop
+    bare prose over keys and block markers. Markdown keeps bottom-up line
+    splicing. Descending order both ways, so a replacement that changes
+    later positions cannot shift earlier ones.
+    """
+    if ext in (".yaml", ".yml"):
+        if not tightened:
+            # Nothing accepted: emit the untouched source rather than a
+            # ruamel re-emission, which normalizes wrapping and sequence
+            # offsets and turns a no-op run into a noisy diff (GH-360).
+            with open(out, "w", encoding="utf-8") as f:
+                f.write(doc.raw)
+            return [p.text for p in doc.paragraphs]
+        for rec in sorted(tightened, key=lambda r: -r["n"]):
+            doc.replace(rec["n"] - 1, rec["cand"])
+        doc.save_as(out)
+        return [p.text for p in doc.paragraphs]
+    for rec in sorted(tightened, key=lambda r: -r["lines"][0]):
+        s, e = rec["lines"]
+        out_lines[s - 1:e] = [rec["cand"]]
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("\n".join(out_lines))
+    return out_lines
+
+
 def _doc_sentence_stats(lines):
     """Sentence stats over a full document (list of lines), prose only."""
     for d in (SHARED,):
@@ -163,6 +193,14 @@ def main():
                          "its targets supply the sentence floor and its "
                          "hedge_policy sets the TS-08 threshold; explicit "
                          "--sent-floor still wins")
+    ap.add_argument("--exclude-keys", nargs="*", default=None,
+                    help="YAML key-path globs whose paragraphs skip rewriting "
+                         "(default for YAML: section_goal, goals.*.goal, "
+                         "acceptance.*, meta.*). Pass --exclude-keys with no "
+                         "args to disable")
+    ap.add_argument("--must-preserve", nargs="*", default=None,
+                    help="exact phrases that must survive rewriting; verify.py "
+                         "rejects candidates that lose any of them")
     a = ap.parse_args()
 
     pd, rm, _, cs = _mods()
@@ -200,6 +238,16 @@ def main():
         out = art + ".tight"
     doc = pd.ProseDocument.open(art)
     parsed = doc.to_parse_result()
+
+    exclude = set()
+    if ext in (".yaml", ".yml"):
+        patterns = (a.exclude_keys if a.exclude_keys is not None
+                    else pd.YAML_EXCLUDE_KEYS_DEFAULT)
+        if patterns:
+            exclude = pd.excluded_indices(doc.paragraphs, patterns)
+            if exclude:
+                print(f"exclude-keys: skipping {len(exclude)} contract-field "
+                      f"paragraph(s): {sorted(exclude)}")
 
     # Findings per paragraph line-range, from the checker run once whole-file.
     all_findings = cs.check(art, hedge_stack=hedge_stack)
@@ -240,6 +288,10 @@ def main():
             rec["status"] = "skipped-short"
             results.append(rec)
             continue
+        if n in exclude:
+            rec["status"] = "excluded-key"
+            results.append(rec)
+            continue
         pf = os.path.join(work, f"p{n:02d}.orig.txt")
         with open(pf, "w") as f:
             f.write(txt)
@@ -263,13 +315,18 @@ def main():
                 break
             if not cand or not cand.strip():
                 break
+            import verify as _vmod
+            cand_clean = _vmod.normalize_ascii(cand.strip())
             cf = os.path.join(work, f"p{n:02d}.cand.txt")
             with open(cf, "w") as f:
-                f.write(cand.strip())
-            v = run([sys.executable, os.path.join(MATCH_VOICE, "verify.py"),
-                     "--original", pf, "--rewrite", cf, "--json"])
+                f.write(cand_clean)
+            vcmd = [sys.executable, os.path.join(MATCH_VOICE, "verify.py"),
+                    "--original", pf, "--rewrite", cf, "--json"]
+            if a.must_preserve:
+                vcmd += ["--must-preserve"] + a.must_preserve
+            v = run(vcmd)
             if v.returncode == 0:
-                rec["cand"] = cand.strip()
+                rec["cand"] = cand_clean
                 status = "tightened"
                 break
         rec["status"] = status
@@ -277,17 +334,14 @@ def main():
         if aborted:
             break
 
-    # Splice accepted candidates, bottom-up so line numbers hold.
     tightened = [r for r in results if r.get("cand")]
-    for rec in sorted(tightened, key=lambda r: -r["lines"][0]):
-        s, e = rec["lines"]
-        out_lines[s - 1:e] = [rec["cand"]]
+    stats_lines = write_draft(doc, ext, out_lines, tightened, out)
 
     # Post-hoc floor: advisory — log candidates that push sentence stats below
     # the human band, but do not revert them (GH-268).
     if a.sent_floor and tightened:
         floor_mean, floor_sd = a.sent_floor
-        cur_mean, cur_sd = _doc_sentence_stats(out_lines)
+        cur_mean, cur_sd = _doc_sentence_stats(stats_lines)
         if cur_mean < floor_mean or cur_sd < floor_sd:
             below = []
             by_shortening = sorted(
@@ -301,8 +355,6 @@ def main():
                   f"actual: mean={cur_mean:.1f}, sd={cur_sd:.1f}). "
                   f"Largest shorteners: {', '.join(below[:5])}")
 
-    with open(out, "w", encoding="utf-8") as f:
-        f.write("\n".join(out_lines))
     with open(os.path.join(work, "results.json"), "w") as f:
         json.dump(results, f, indent=2)
 

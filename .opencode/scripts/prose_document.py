@@ -18,6 +18,7 @@ of comments, key order, and scalar style.
 CLI:
   prose_document.py <file> [--json]        list paragraphs
   prose_document.py <file> --replace N     read new text from stdin, replace paragraph N
+  prose_document.py <file> --aligned       print the line-aligned prose view
 """
 
 import argparse
@@ -32,6 +33,45 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 MIN_PROSE_WORDS = 5
+
+YAML_EXCLUDE_KEYS_DEFAULT = [
+    "section_goal", "goals.*.goal", "acceptance.*", "meta.*",
+]
+
+
+def _match_key_glob(key_path, pattern):
+    """Match a dot-joined key path against a glob pattern.
+
+    Segments are matched literally except ``*`` which matches exactly one
+    segment.  A trailing ``.*`` matches anything rooted at the prefix.
+    """
+    if key_path is None:
+        return False
+    parts = ".".join(key_path) if isinstance(key_path, list) else key_path
+    pp = pattern.split(".")
+    kp = parts.split(".")
+    if pp[-1] == "*" and len(pp) >= 2:
+        prefix = pp[:-1]
+        if len(kp) < len(prefix):
+            return False
+        return all(a == b or a == "*" for a, b in zip(prefix, kp[:len(prefix)]))
+    if len(pp) != len(kp):
+        return False
+    return all(a == b or a == "*" for a, b in zip(pp, kp))
+
+
+def excluded_indices(paragraphs, patterns):
+    """Return set of 1-based paragraph indices whose key_path matches any pattern."""
+    out = set()
+    for p in paragraphs:
+        kp = p._key_path if hasattr(p, "_key_path") else getattr(p, "key_path", None)
+        if kp is None:
+            continue
+        for pat in patterns:
+            if _match_key_glob(kp, pat):
+                out.add(p.index + 1)
+                break
+    return out
 
 
 class Paragraph:
@@ -48,8 +88,12 @@ class Paragraph:
         self.word_count = len(text.split())
         self._key_path = key_path
 
+    @property
+    def key_path(self):
+        return list(self._key_path) if self._key_path else None
+
     def to_dict(self):
-        return {
+        d = {
             "index": self.index,
             "text": self.text,
             "start_line": self.start_line,
@@ -57,6 +101,9 @@ class Paragraph:
             "context": self.context,
             "word_count": self.word_count,
         }
+        if self._key_path is not None:
+            d["key_path"] = self.key_path
+        return d
 
 
 class ProseDocument:
@@ -95,6 +142,29 @@ class ProseDocument:
         to ProseDocument.open(path).to_parse_result() with no other change.
         """
         raise NotImplementedError
+
+    @property
+    def raw(self):
+        """The source text exactly as read — for writers that want to emit
+        an untouched copy without a round-trip re-emission (GH-360)."""
+        raise NotImplementedError
+
+    def aligned_lines(self):
+        """Line-aligned prose view: one entry per source line, prose kept on
+        its source line, scaffolding blanked. Line-numbered findings against
+        this view refer to the real file (same contract as detex --aligned).
+        """
+        raise NotImplementedError
+
+
+def prose_view_aligned(path):
+    """Aligned prose view of any supported file, as a list of lines.
+
+    Markdown is its own prose view (consumers already know its scaffolding),
+    so it returns the file's lines unchanged; YAML returns prose scalar
+    content on its source lines with keys, comments, and structure blanked.
+    """
+    return ProseDocument.open(path).aligned_lines()
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +227,13 @@ class MarkdownDocument(ProseDocument):
         import md_paragraphs
         return md_paragraphs.parse(self._content_from_lines())
 
+    @property
+    def raw(self):
+        return self._original
+
+    def aligned_lines(self):
+        return list(self._lines)
+
 
 # ---------------------------------------------------------------------------
 # YAML backend
@@ -198,6 +275,10 @@ class YamlDocument(ProseDocument):
         from ruamel.yaml import YAML
         self._yaml = YAML()
         self._yaml.preserve_quotes = True
+        # Never introduce line wraps the source did not have (GH-360): the
+        # default emitter width (80) re-flows every long scalar on save, so
+        # replacing one paragraph rewrapped untouched prose across the file.
+        self._yaml.width = 2 ** 16
         self._detect_indent()
         self._data = self._yaml.load(self._raw)
         self._paras = []
@@ -216,6 +297,7 @@ class YamlDocument(ProseDocument):
                 for off in (0, 2):
                     y = YAML()
                     y.preserve_quotes = True
+                    y.width = 2 ** 16  # same emitter as _yaml (GH-360)
                     y.indent(mapping=mi, sequence=si, offset=off)
                     data = y.load(self._raw)
                     buf = io.StringIO()
@@ -339,6 +421,84 @@ class YamlDocument(ProseDocument):
         return Result(lines=lines, fm_close=-1, paragraphs=paras,
                       coverage=coverage, unaccounted=[])
 
+    @property
+    def raw(self):
+        return self._raw
+
+    # Block-scalar header: optional "- " item marker, optional "key:", then
+    # a literal/folded indicator. The prose lives on the following lines.
+    _BLOCK_HEADER = re.compile(
+        r"^(\s*)(?:-\s+)?(?:[^:#\s][^:]*:)?\s*[>|][+-]?[0-9]*\s*(?:#.*)?$")
+    # Inline scalar prefix: "- " item marker and/or "key: " before the value.
+    _INLINE_PREFIX = re.compile(r"^\s*(?:-\s+)?(?:[^:#\s][^:]*:\s+)?")
+
+    def _indent(self, line):
+        return len(line) - len(line.lstrip())
+
+    def aligned_lines(self):
+        raw = self._raw.split("\n")
+        out = [""] * len(raw)
+        for p in self._paras:
+            start = p.start_line
+            if not (1 <= start <= len(raw)):
+                continue
+            header = raw[start - 1]
+            m = self._BLOCK_HEADER.match(header)
+            if m:
+                # Literal/folded scalar: consume the indented block under the
+                # header. Blank lines belong to the block only while a deeper-
+                # indented line still follows.
+                indent = self._indent(header)
+                ln = start + 1
+                while ln <= len(raw):
+                    line = raw[ln - 1]
+                    if not line.strip():
+                        rest = (raw[j] for j in range(ln, len(raw)))
+                        nxt = next((l for l in rest if l.strip()), None)
+                        if nxt is not None and self._indent(nxt) > indent:
+                            ln += 1
+                            continue
+                        break
+                    if self._indent(line) <= indent:
+                        break
+                    out[ln - 1] = line.strip()
+                    ln += 1
+            else:
+                # Inline scalar: value starts on the key line; plain-scalar
+                # continuations are the deeper-indented lines that follow.
+                # A single-line value is taken from the parsed paragraph text,
+                # which ruamel has already unquoted and unescaped.
+                if "\n" not in p.text and not (
+                        start < len(raw)
+                        and raw[start].strip()
+                        and self._indent(raw[start]) > self._indent(header)):
+                    out[start - 1] = p.text
+                    continue
+                value = self._INLINE_PREFIX.sub("", header).strip()
+                qc = value[0] if value[:1] in ("'", '"') else ""
+                if qc:
+                    value = value[1:]
+                    if value.endswith(qc):
+                        value = value[:-1]
+                    if qc == "'":
+                        value = value.replace("''", "'")
+                out[start - 1] = value
+                indent = self._indent(header)
+                ln = start + 1
+                while ln <= len(raw):
+                    line = raw[ln - 1]
+                    if not line.strip() or self._indent(line) <= indent:
+                        break
+                    cont = line.strip()
+                    if qc:
+                        if cont.endswith(qc):
+                            cont = cont[:-1]
+                        if qc == "'":
+                            cont = cont.replace("''", "'")
+                    out[ln - 1] = cont
+                    ln += 1
+        return out
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -352,9 +512,16 @@ def main():
                     help="emit paragraphs as JSON")
     ap.add_argument("--replace", type=int, metavar="N",
                     help="replace paragraph N with text from stdin")
+    ap.add_argument("--aligned", action="store_true",
+                    help="print the line-aligned prose view (one line per "
+                         "source line, scaffolding blanked)")
     a = ap.parse_args()
 
     doc = ProseDocument.open(a.file)
+
+    if a.aligned:
+        print("\n".join(doc.aligned_lines()))
+        return
 
     if a.replace is not None:
         new_text = sys.stdin.read().rstrip("\n")

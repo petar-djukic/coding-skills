@@ -21,7 +21,7 @@ paragraphs are replaced — which is why this belongs in the driver and not in a
 procedure someone is expected to remember afterwards.
 
 Usage:
-  python3 drive.py --article <path.md> [--model gemma4:12b] [--out <path>]
+  python3 drive.py --article <path.md|path.yaml> [--model gemma4:12b] [--out <path>]
                    [--retries 2] [--min-words 12] [--temperature 0.7]
                    [--coverage-only] [--pangram]
 """
@@ -62,6 +62,28 @@ def run(cmd, **kw):
     # both arms of an A/B before either produced a line.
     return subprocess.run(cmd, capture_output=True, text=True,
                           errors="replace", **kw)
+
+
+def default_out(art):
+    """Draft path beside the article, extension-aware (GH-349).
+
+    The old .md-only substitution returned the input path unchanged for any
+    other extension, so a YAML article's draft overwrote the article.
+    """
+    stem, ext = os.path.splitext(art)
+    return f"{stem}.vr-draft{ext}"
+
+
+def manifest_path(out):
+    """Provenance path beside the draft, appended to the draft's stem.
+
+    Never substituted for the extension (GH-349): substitution left
+    manifest == out for non-.md drafts, overwriting the finished draft.
+    """
+    manifest = os.path.splitext(out)[0] + ".generation.yaml"
+    if manifest == out:
+        manifest = out + ".generation.yaml"
+    return manifest
 
 
 def _prose_document():
@@ -505,13 +527,15 @@ def write_manifest(path, a, voice_dir, results, pangram=None, guard=None):
            "  anchor_files:"]
     out += [f"    - {_yaml_scalar(f)}" for f in anchor_files] or ["    []"]
     out.append("  result: {accepted: %d, kept_original: %d, skipped_short: %d, "
-               "rewrite_error: %d, gate_error: %d, unselected: %d}"
+               "rewrite_error: %d, gate_error: %d, unselected: %d, "
+               "excluded_key: %d}"
                % (counts.get("accepted-mechanical", 0),
                   counts.get("kept-original", 0),
                   counts.get("skipped-short", 0),
                   counts.get("rewrite-error", 0),
                   counts.get("gate-error", 0),
-                  counts.get("unselected", 0)))
+                  counts.get("unselected", 0),
+                  counts.get("excluded-key", 0)))
     if pangram:
         before, after = pangram
         out.append("  pangram:")
@@ -577,8 +601,40 @@ def restore_full_bold(original, candidate):
     return candidate
 
 
+def assemble_draft(art, lines, accept, rng, out):
+    """Write accepted candidates into the draft at `out`.
+
+    YAML goes back through the document model (GH-358): ruamel round-trip
+    keeps comments, key order, and structure — raw line splicing would drop
+    bare prose over keys and block markers. Markdown keeps bottom-up line
+    splicing. Descending order both ways, so a replacement that changes
+    later paragraph indices cannot shift earlier ones. `accept` maps the
+    1-based paragraph number to its candidate text; `rng` maps it to the
+    (start, end) line span the markdown splice uses.
+    """
+    if art.lower().endswith((".yaml", ".yml")):
+        doc = _prose_document().ProseDocument.open(art)
+        if not accept:
+            # Nothing accepted: emit the untouched source rather than a
+            # ruamel re-emission, which normalizes wrapping and sequence
+            # offsets and turns a no-op run into a noisy diff (GH-360).
+            open(out, "w").write(doc.raw)
+            return
+        for n in sorted(accept, reverse=True):
+            doc.replace(n - 1, accept[n])
+        doc.save_as(out)
+        return
+    out_lines = list(lines)
+    for n in sorted(accept, reverse=True):
+        s, e = rng[n]
+        # The wholly-bold repair happens before the gate now, so an accepted
+        # candidate already carries the markup it is going to carry.
+        out_lines[s - 1:e] = [accept[n]]
+    open(out, "w").write("\n".join(out_lines))
+
+
 def parse_paragraphs(path, min_words):
-    """Return (lines, fm_close, paragraphs, coverage, unaccounted).
+    """Return (lines, fm_close, paragraphs, coverage, unaccounted, doc).
 
     Uses ProseDocument for both markdown and YAML files, with the
     to_parse_result() adapter for backward-compat tuple shape.
@@ -586,7 +642,7 @@ def parse_paragraphs(path, min_words):
     pd = _prose_document()
     doc = pd.ProseDocument.open(path)
     r = doc.to_parse_result()
-    return r.lines, r.fm_close, r.paragraphs, r.coverage, r.unaccounted
+    return r.lines, r.fm_close, r.paragraphs, r.coverage, r.unaccounted, doc
 
 
 def main():
@@ -594,7 +650,8 @@ def main():
     ap.add_argument("--article", required=True)
     ap.add_argument("--model", default=os.environ.get("MATCH_VOICE_MODEL", "gemma4:12b"))
     ap.add_argument("--endpoint", default=os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434"))
-    ap.add_argument("--out", help="draft path (default: <article>.vr-draft.md)")
+    ap.add_argument("--out", help="draft path (default: <stem>.vr-draft<ext> "
+                                  "beside the article)")
     ap.add_argument("--retries", type=int, default=2)
     ap.add_argument("--min-words", type=int, default=12)
     ap.add_argument("--temperature", default="0.7")
@@ -638,14 +695,38 @@ def main():
                          "UPLOADS this article and the draft to a third party "
                          "that retains them; passing the flag is the consent, "
                          "and it is asked for per document. Costs two scans.")
+    ap.add_argument("--exclude-keys", nargs="*", default=None,
+                    help="YAML key-path globs whose paragraphs skip rewriting "
+                         "(default for YAML: section_goal, goals.*.goal, "
+                         "acceptance.*, meta.*). Pass --exclude-keys with no "
+                         "args to disable")
+    ap.add_argument("--must-preserve", nargs="*", default=None,
+                    help="exact phrases that must survive rewriting; verify.py "
+                         "rejects candidates that lose any of them")
     a = ap.parse_args()
 
     if a.no_anchors and any([a.role, a.anchor_tags, a.stratum, a.author]):
         ap.error("--no-anchors contradicts --role/--anchor-tags/--stratum/--author")
 
     art = os.path.abspath(a.article)
-    out = a.out or re.sub(r"\.md$", ".vr-draft.md", art)
-    lines, fm_close, paras, coverage, unaccounted = parse_paragraphs(art, a.min_words)
+    out = os.path.abspath(a.out) if a.out else default_out(art)
+    if out == art:
+        sys.exit(f"refusing to overwrite the article: --out resolves to the "
+                 f"input path ({art}); pass a different --out")
+    lines, fm_close, paras, coverage, unaccounted, doc = parse_paragraphs(art, a.min_words)
+
+    pd = _prose_document()
+    exclude = set()
+    ext = os.path.splitext(art)[1].lower()
+    if ext in (".yaml", ".yml"):
+        patterns = (a.exclude_keys if a.exclude_keys is not None
+                    else pd.YAML_EXCLUDE_KEYS_DEFAULT)
+        if patterns:
+            exclude = pd.excluded_indices(doc.paragraphs, patterns)
+            if exclude:
+                print(f"exclude-keys: skipping {len(exclude)} contract-field "
+                      f"paragraph(s): {sorted(exclude)}")
+
     # Validated before any scan or model call: an invalid selection must cost
     # nothing.
     selection = None
@@ -712,6 +793,8 @@ def main():
             rec["status"] = "skipped-short"; results.append(rec); continue
         if selection is not None and n not in selection:
             rec["status"] = "unselected"; results.append(rec); continue
+        if n in exclude:
+            rec["status"] = "excluded-key"; results.append(rec); continue
         pf = f"{work}/p{n:02d}.orig.txt"; open(pf, "w").write(txt)
         if a.no_anchors:
             ajf = f"{work}/p{n:02d}.anchors.json"; open(ajf, "w").write("[]")
@@ -752,9 +835,14 @@ def main():
             # the way out has to be patched before the gate reads it, or the
             # repair and the check disagree about the same paragraph.
             cand_text = restore_full_bold(txt, rw.stdout.strip())
+            import verify as _vmod
+            cand_text = _vmod.normalize_ascii(cand_text)
             cf = f"{work}/p{n:02d}.cand.txt"; open(cf, "w").write(cand_text)
-            vf = run(["python3", f"{SK}/verify.py", "--original", pf, "--rewrite", cf,
-                      "--anchors-json", ajf, "--json"])
+            vcmd = ["python3", f"{SK}/verify.py", "--original", pf, "--rewrite", cf,
+                    "--anchors-json", ajf, "--json"]
+            if a.must_preserve:
+                vcmd += ["--must-preserve"] + a.must_preserve
+            vf = run(vcmd)
             crash = classify_gate_crash(vf.returncode, vf.stdout, vf.stderr)
             if crash:
                 rec.update(crash)
@@ -790,13 +878,7 @@ def main():
     # assemble
     accept = {r["n"]: r["cand"] for r in results if r.get("cand")}
     rng = {r["n"]: tuple(r["lines"]) for r in results}
-    out_lines = list(lines)
-    for n in sorted(accept, reverse=True):
-        s, e = rng[n]
-        # The wholly-bold repair happens before the gate now, so an accepted
-        # candidate already carries the markup it is going to carry.
-        out_lines[s - 1:e] = [accept[n]]
-    open(out, "w").write("\n".join(out_lines))
+    assemble_draft(art, lines, accept, rng, out)
     json.dump(results, open(f"{work}/results.json", "w"), indent=2)
 
     from collections import Counter as C
@@ -856,7 +938,7 @@ def main():
 
     # Last, so it can record the Pangram numbers when there are any. Written
     # beside the draft rather than into the temp dir, which the OS reaps.
-    manifest = re.sub(r"\.md$", ".generation.yaml", out)
+    manifest = manifest_path(out)
     used = write_manifest(manifest, a, voice_dir, results, pangram_pair,
                           guard=guard_warns)
     print(f"\nprovenance: {manifest}")
@@ -866,7 +948,7 @@ def main():
     # every rewritable paragraph, nothing was ever verified and the "draft" is
     # a copy of the input. Success would present that copy as a rewrite.
     gated = [r for r in results
-             if r["status"] not in ("skipped-short", "unselected")]
+             if r["status"] not in ("skipped-short", "unselected", "excluded-key")]
     if gated and all(r["status"] == "gate-error" for r in gated):
         sys.exit("gate-error on every paragraph: the verification gate never "
                  "ran. The draft is an untouched copy — do not use it.")
