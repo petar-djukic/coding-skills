@@ -1,6 +1,6 @@
 # coding-skills
 
-Claude Code skills and slash commands for spec-driven development through GitHub issues and pull requests, mirrored to Cursor, OpenCode, Codex, and GitHub Copilot.
+Claude Code slash commands for spec-driven development through GitHub issues and pull requests, mirrored to Cursor, OpenCode, Codex, and GitHub Copilot.
 
 When planning and execution share a context window, coding agents drift: the plan erodes as diffs and test output fill the buffer. This repository separates the two. Planning commands turn intent into GitHub issues that include acceptance criteria; execution commands pop each issue into its own git worktree and close it with a pull request. The issue tracker holds the plan, so no context window has to.
 
@@ -16,7 +16,7 @@ flowchart LR
 
 ## Scope and Status
 
-The repository contains 17 commands and 11 skills, canonical under `.claude/` and generated for four other assistant surfaces. Commands cover the issue workflow (`gh-issue-push`, `gh-issue-pop`, `gh-issue-show`, and `bd-*` equivalents for beads repositories), orchestration (`make-work`, `do-work`), experiments (`exp-start`, `exp-stop`), releases (`gh-release-push`), and a writing pipeline (`brainstorm-article`, `write-article`, `seo-pass`). Skills are a prose-quality pipeline (`humanize`, `filter-tells`, `match-voice`, `match-outline`, `match-structure`, `tighten-style`, `tune-anchors`), reference management (`update-references`, `audit-references`), `patent-disclosure`, and `pattern-language`. The prose pipeline rewrites AI-drafted text against the Pangram detector and records before-and-after scores for every run.
+The repository contains 14 commands, canonical under `.claude/` and generated for four other assistant surfaces. Commands cover the issue workflow (`gh-issue-push`, `gh-issue-pop`, `gh-issue-show`, and `bd-*` equivalents for beads repositories), orchestration (`make-work`, `do-work`), experiments (`exp-start`, `exp-stop`), releases (`gh-release-push`), and repository setup (`bootstrap`, `align-specs`, `test-clone`). The prose-quality skills and the writing commands moved to [writing-skills](https://github.com/petar-djukic/writing-skills) in August 2026, carrying their history; the two repositories compose by linking both `.claude` trees into a consuming project.
 
 ## Documentation
 
@@ -33,18 +33,15 @@ All work passes through issues. `make-work` splits a goal into chunks that fit a
 ## Repository Structure
 
 ```
-.claude/      canonical commands, skills, and rules
+.claude/      canonical commands and rules
 .cursor/      generated mirror for Cursor
 .opencode/    generated mirror for OpenCode
-.agents/      generated skills for Codex, with root AGENTS.md
+.agents/      generated command skills for Codex, with root AGENTS.md
 .github/      self-contained mirror for GitHub Copilot
-scripts/      mirror sync and environment preflight
+scripts/      mirror sync
 ```
 
 ## Mirrors
 
-Assistant configuration is canonical under `.claude/` and is generated outward by `scripts/sync-mirrors.sh` (the `--check` option reports drift). Cursor and OpenCode receive both commands and skills; Codex reads `AGENTS.md` and finds the skill definitions in `.agents/skills/`, so each canonical command becomes a command skill with its paths rewritten to stay within that subtree. The `.github/` mirror is self-contained. Prompts inline the complete workflow and never reference `.claude/`, therefore `ln -s .../.github .github` drops the configuration into a Copilot repository with no dangling references. See [.claude/README.md](.claude/README.md).
+Assistant configuration is canonical under `.claude/` and is generated outward by `scripts/sync-mirrors.sh` (the `--check` option reports drift). Cursor and OpenCode receive the commands; Codex reads `AGENTS.md` and finds command skills in `.agents/skills/`, each canonical command rewritten to stay within that subtree. The `.github/` mirror is self-contained. Prompts inline the complete workflow and never reference `.claude/`, therefore `ln -s .../.github .github` drops the configuration into a Copilot repository with no dangling references. See [.claude/README.md](.claude/README.md).
 
-## Environment
-
-[pixi](https://pixi.sh/) handles Python dependencies. Each agent folder includes a `pixi.toml` and a `pixi.lock`, and `scripts/ensure-env.sh` creates the locked environment when the repo is opened, installing pixi if it is missing. Because the manifest travels with the symlinked agent directory, a fresh machine needs no manual setup. Credentials (`SERPAPI_KEY`, `ANTHROPIC_API_KEY`, optional `SEMANTIC_SCHOLAR_API_KEY`) come from the environment, not pixi.
