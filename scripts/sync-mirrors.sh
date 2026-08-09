@@ -114,7 +114,9 @@ build_stage() {
         } > "$STAGE/$target/commands/$name"
       fi
     done
-    # skills: copy tree, rewriting canonical path references
+    # skills: copy tree, rewriting canonical path references; a repository
+    # carrying only commands has no skills directory and that is a normal state
+    [[ -d "$ROOT/.claude/skills" ]] || continue
     (cd "$ROOT/.claude/skills" && find . -type f ! -path '*/__pycache__/*') | while IFS= read -r rel; do
       local src="$ROOT/.claude/skills/$rel"
       local dst="$STAGE/$target/skills/$rel"
@@ -148,6 +150,8 @@ build_stage() {
   # .cursor/.opencode copies (which keep a sibling .claude/ and rewrite only
   # the skills prefix), the .github copy must also flatten .claude/commands and
   # .claude/rules mentions — those files are not carried by a bare symlink.
+  # A commands-only repository has no skills directory; skip the copy.
+  [[ -d "$ROOT/.claude/skills" ]] && \
   (cd "$ROOT/.claude/skills" && find . -type f ! -path '*/__pycache__/*') | while IFS= read -r rel; do
     local src="$ROOT/.claude/skills/$rel"
     local dst="$STAGE/.github/skills/$rel"
@@ -165,6 +169,7 @@ build_stage() {
   # resolves inside .github, so it survives a bare symlink.
   local skilldir sname sdesc
   for skilldir in "$ROOT/.claude/skills/"*/; do
+    [[ -d "$skilldir" ]] || continue
     sname="$(basename "$skilldir")"
     sdesc="$(extract_description "$skilldir/SKILL.md")"
     cat > "$STAGE/.github/prompts/$sname.prompt.md" <<EOF
@@ -229,7 +234,8 @@ EOF
   done
 
   # Reusable skill trees, with canonical path references rewritten to stay
-  # inside .agents.
+  # inside .agents. A commands-only repository has no skills directory.
+  [[ -d "$ROOT/.claude/skills" ]] && \
   (cd "$ROOT/.claude/skills" && find . -type f ! -path '*/__pycache__/*') | while IFS= read -r rel; do
     local src="$ROOT/.claude/skills/$rel"
     local dst="$STAGE/.agents/skills/$rel"
@@ -320,8 +326,9 @@ AGENTSEOF
   local surface
   for surface in .cursor .opencode .github .agents; do
     mkdir -p "$STAGE/$surface/scripts"
-    cp "$ROOT/.claude/pixi.toml" "$STAGE/$surface/pixi.toml"
-    cp "$ROOT/.claude/pixi.lock" "$STAGE/$surface/pixi.lock"
+    # A repository without Python-backed skills carries no pixi manifest.
+    [[ -f "$ROOT/.claude/pixi.toml" ]] && cp "$ROOT/.claude/pixi.toml" "$STAGE/$surface/pixi.toml"
+    [[ -f "$ROOT/.claude/pixi.lock" ]] && cp "$ROOT/.claude/pixi.lock" "$STAGE/$surface/pixi.lock"
     # Every shared script, not a hardcoded filename: naming one file meant the
     # next script added to .claude/scripts/ was silently missing from all four
     # surfaces, and the skills that import it fell back to whatever else
@@ -408,6 +415,17 @@ for area in "${AREAS[@]}"; do
 done
 
 for file in "${FILES[@]}"; do
+  # A file absent from the stage is one the canonical tree no longer carries
+  # (e.g. pixi manifests in a repository with no Python-backed skills): remove
+  # the mirror copy rather than fail the sync.
+  if [[ ! -f "$STAGE/$file" ]]; then
+    if [[ "$MODE" == "check" ]]; then
+      if [[ -f "$ROOT/$file" ]]; then drift=1; echo "DRIFT: $file (stale, no canonical source)"; fi
+    else
+      rm -f "$ROOT/$file"
+    fi
+    continue
+  fi
   if [[ "$MODE" == "check" ]]; then
     if ! diff "$STAGE/$file" "$ROOT/$file" > /dev/null 2>&1; then
       drift=1

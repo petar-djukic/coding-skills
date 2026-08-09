@@ -12,7 +12,8 @@ Specifications are the source of truth. Code serves specifications, not the othe
 
 For documents aimed outside the repository (papers, whitepapers, RFCs,
 specifications, invention disclosures), pick the form from
-[technical-document-types.md](technical-document-types.md). The YAML
+[technical-document-types.md](https://github.com/petar-djukic/writing-skills/blob/main/.claude/rules/technical-document-types.md)
+(now in writing-skills). The YAML
 types below govern documents inside the repository.
 
 ## YAML-First
