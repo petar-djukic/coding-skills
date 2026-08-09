@@ -16,7 +16,7 @@ flowchart LR
 
 ## Scope and Status
 
-The repository contains 17 commands and 11 skills, canonical under `.claude/` and generated for four other assistant surfaces. Commands cover the issue workflow (`gh-issue-push`, `gh-issue-pop`, `gh-issue-show`, and `bd-*` equivalents for beads repositories), orchestration (`make-work`, `do-work`), experiments (`exp-start`, `exp-stop`), releases (`gh-release-push`), and a writing pipeline (`brainstorm-article`, `write-article`, `seo-pass`). Skills are a prose-quality pipeline (`humanize`, `filter-tells`, `match-voice`, `match-outline`, `match-structure`, `tighten-style`, `tune-anchors`), reference management (`update-references`, `audit-references`), `patent-disclosure`, and `pattern-language`.
+The repository contains 17 commands and 11 skills, canonical under `.claude/` and generated for four other assistant surfaces. Commands cover the issue workflow (`gh-issue-push`, `gh-issue-pop`, `gh-issue-show`, and `bd-*` equivalents for beads repositories), orchestration (`make-work`, `do-work`), experiments (`exp-start`, `exp-stop`), releases (`gh-release-push`), and a writing pipeline (`brainstorm-article`, `write-article`, `seo-pass`). Skills are a prose-quality pipeline (`humanize`, `filter-tells`, `match-voice`, `match-outline`, `match-structure`, `tighten-style`, `tune-anchors`), reference management (`update-references`, `audit-references`), `patent-disclosure`, and `pattern-language`. The prose pipeline rewrites AI-drafted text against the Pangram detector and records before-and-after scores for every run.
 
 ## Documentation
 
