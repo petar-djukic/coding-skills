@@ -41,7 +41,7 @@ broken references, and use cases missing from the roadmap.
 
 Then summarize: the problem the project solves, its architecture, what is
 built versus in progress, which release is current and which of its use cases
-remain, and the repo size from `mage stats`.
+remain, and the repo size from `mage stats` where that target exists.
 
 ## Proposing the work
 

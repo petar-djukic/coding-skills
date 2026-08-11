@@ -116,7 +116,7 @@ what differs.
 
    <summary of work>
 
-   Actual LOC: <from mage stats deltas> (Estimated: <this issue's Estimated LOC>)
+   Actual LOC: <from mage stats deltas, or the diff when the repo has no stats target> (Estimated: <this issue's Estimated LOC>)
    tokens: <count>"
    ```
 
@@ -269,8 +269,9 @@ branch; `do-work` never branches per unit. Work from inside the worktree
 (`pwd` should be `../gh-<n>-<slug>` or `../bd-<id>-<slug>`) — the main checkout
 stays on `main`.
 
-Push after every commit. Always run `mage stats` and include the full Stats
-block. Update `road-map.yaml` when a use case completes.
+Push after every commit. Run `mage stats` and include the full Stats block
+where the repo defines that target; where it does not, count the diff and
+report the same fields. Update `road-map.yaml` when a use case completes.
 
 When no open unit remains — sub-issue count reaches zero, or
 `bd ready --label <id>` returns nothing for this epic — run the matching pop

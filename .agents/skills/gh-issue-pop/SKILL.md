@@ -167,8 +167,8 @@ work is done; on the multi-sub-issue path, when every sub-issue is closed.
 
 3. **Push, then open the PR** against `main`, titled `GH-<number>: <title>`,
    with sections: Summary (2-3 sentences), Changes, Stats (`mage stats` deltas
-   plus Estimated vs Actual LOC), and Test plan (consistency check, tests, docs
-   — where those exist). End with one `Closes #N` line per issue: the parent
+   where that target exists, otherwise the diff, plus Estimated vs Actual LOC),
+   and Test plan (consistency check, tests, docs — where those exist). End with one `Closes #N` line per issue: the parent
    and every sub-issue.
 
    Those `Closes` lines are what auto-close the issues at merge. Sub-issue

@@ -9,12 +9,14 @@ text after the prompt invocation as its arguments ($ARGUMENTS).
 
 Test the orchestrator library by deploying it into a target Go repository and running the test plan. Failures indicate bugs in the orchestrator code, which get fixed in this repository.
 
+**Scope.** Run this from inside the orchestrator repository itself — the one that ships `test-plan.yaml` at its root and `pkg/orchestrator/` in its tree. It patches orchestrator source when a test fails, so it does nothing useful anywhere else.
+
 ## Arguments
 
 $ARGUMENTS is a Go module reference in `module@version` format, or a local directory path.
 
 Examples:
-- `/test-clone github.com/petar-djukic/mcp-calc@v0.20260214.1`
+- `/test-clone github.com/<owner>/<module>@v0.20260214.1` — any Go module you can fetch
 - `/test-clone /path/to/local/repo`
 
 ## Workflow
@@ -117,7 +119,7 @@ Summarize:
 2. Total test cases: run / passed / failed / skipped
 3. Fixes applied to the orchestrator
 4. Skipped tests (unfixable)
-5. `mage stats` output from `$ORCH_ROOT`
+5. `mage stats` output from `$ORCH_ROOT`, where that target exists
 
 ```bash
 rm -rf "$(dirname "$REPO_DIR")"
