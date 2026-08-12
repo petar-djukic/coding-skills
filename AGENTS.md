@@ -27,35 +27,25 @@ One issue per logical change; small fixes still need an issue. The only
 exceptions are an emergency hotfix authorized in-session and `exp/*`
 experiment branches, which never merge to `main`.
 
-## Skills
+## Skills and commands
 
-Reusable skills and one command skill per canonical command are discovered
-from `.agents/skills/`. Command skills carry the complete workflow inline.
+Codex discovers both from `.agents/skills/`.
 
-Python-backed skills run in a pixi environment that ships beside them: run
-`.agents/scripts/ensure-env.sh` once per machine, then invoke scripts with
-`pixi run --manifest-path .agents/pixi.toml python <script>`. API keys
-(`SERPAPI_KEY`, `ANTHROPIC_API_KEY`, `OPENALEX_MAILTO`) come from the
-environment, not from pixi.
+Command workflows (14), each carrying its full workflow inline: align-specs, bd-issue-pop, bd-issue-push, bd-issue-show, bootstrap, do-work, exp-start, exp-stop, gh-issue-pop, gh-issue-push, gh-issue-show, gh-release-push, make-work, test-clone.
+
+Python-backed skills run in a pixi environment that ships beside them:
+run `.agents/scripts/ensure-env.sh` once per machine, then invoke scripts
+with `pixi run --manifest-path .agents/pixi.toml python <script>`.
 
 ## Conventions
 
 These are summaries; the canonical rule files hold the detail.
 
-- **Git** — issue and PR for every change; work in worktrees; never commit to
-  `main`. See `.claude/rules/git-workflow.md`.
-- **Python** — environments are managed with pixi, never bare pip or
-  virtualenv. See `.claude/rules/pixi-python.md`.
-- **Documentation** — specifications are the source of truth and code serves
-  them; YAML for structured documents, markdown for prose; active voice;
-  observe the forbidden-terms list. See
-  `.claude/rules/documentation-standards.md`.
-- **READMEs** — written as a technical brief: title, thesis, diagram, scope,
-  then build instructions last. See `.claude/rules/readme-format.md`.
-- **Document types** — pick the right external form (concept paper, RFC,
-  specification, invention disclosure) from
-  `.claude/rules/technical-document-types.md`.
+- **Documentation Standards** — Distilled from `docs/constitutions/design.yaml`. See `.claude/rules/documentation-standards.md`.
+- **Git Workflow** — All work goes through issues and pull requests. See `.claude/rules/git-workflow.md`.
+- **Pixi for Python** — We use pixi (https://pixi.sh/) to manage Python environments and dependencies. See `.claude/rules/pixi-python.md`.
+- **README Format** — README files are the public interface of a repository. See `.claude/rules/readme-format.md`.
+- **Response Style** — Default to cliffnotes. See `.claude/rules/response-style.md`.
 
-Before committing, run the repository's consistency check if one exists
-(`mage audit` or `mage analyze`), and commit after each round of edits rather
-than accumulating changes.
+Before committing, run the repository's consistency check if it defines
+one, and commit after each round of edits rather than accumulating them.
