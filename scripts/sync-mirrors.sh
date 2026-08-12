@@ -401,6 +401,18 @@ fi
 
 drift=0
 for area in "${AREAS[@]}"; do
+  # An area with no canonical content stages as an empty directory, and git
+  # cannot track one, so no committed tree can ever match it: --check reported
+  # drift on every clean checkout and sync left stray empty directories behind
+  # (GH-381). This repository hit it for all seven skills/scripts areas once
+  # the prose skills moved to writing-skills and .claude/skills and
+  # .claude/scripts were left empty. Empty stage against an absent or empty
+  # target is agreement. The FILES loop below already handles the equivalent
+  # case for single files.
+  if [[ -z "$(ls -A "$STAGE/$area" 2>/dev/null)" ]] &&
+     [[ -z "$(ls -A "$ROOT/$area" 2>/dev/null)" ]]; then
+    continue
+  fi
   if [[ "$MODE" == "check" ]]; then
     if ! diff -r "$STAGE/$area" "$ROOT/$area" > /dev/null 2>&1; then
       drift=1
