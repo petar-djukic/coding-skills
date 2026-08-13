@@ -60,13 +60,38 @@ Phase 4.
 
 After user approval:
 
-1. Ensure the main repo is on `main` (the worktree keeps main untouched):
+1. Ensure the main repo is on `main` and level with the remote (the worktree
+   keeps main untouched):
 
    ```bash
    git checkout main
+   git fetch origin main
+   git merge --ff-only origin/main
    ```
 
-2. Create a git worktree with a new branch:
+   The fetch is not optional. `git worktree add` branches from whatever `main`
+   points at and says nothing about how old that is, so a repository that has
+   not pulled since someone else merged produces a branch built on stale code.
+   `--ff-only` rather than `pull`: a diverged `main` is a state to report, not
+   one to resolve by merging on the user's behalf.
+
+2. Re-read the issue, immediately before branching:
+
+   ```bash
+   gh issue view <number> --repo <owner>/<repo> \
+     --json state,closedByPullRequestsReferences \
+     --jq '"\(.state) closed-by: \([.closedByPullRequestsReferences[]?.number] | join(", "))"'
+   ```
+
+   Stop if it is no longer open, and name the PR that closed it — the operator
+   needs to see what already landed, not just that the pop failed. Phase 0-2
+   checked this too, and that check is not sufficient: Phase 3 waits for a
+   human to approve the breakdown, and the issue can close in that window.
+   Not hypothetical — a pop of `writing-skills` GH-28 read `OPEN` about a
+   minute after a PR merged and closed it, then rebuilt the entire fix on a
+   stale base. Nothing caught it until Phase 5.
+
+3. Create a git worktree with a new branch:
 
    ```bash
    git worktree add ../gh-<number>-<slug> -b gh-<number>-<slug>
@@ -129,6 +154,7 @@ Check the Claude credentials file exists.
 
 ```bash
 git checkout main
+git fetch origin main && git merge --ff-only origin/main   # as in Phase 4: never generate onto a stale main
 COBBLER_GEN_NAME=gh-<number>-<slug> mage generator:start   # creates generation-gh-<number>-<slug>
 mage generator:run                                         # measure+stitch until no open issues
 mage generator:resume                                      # after an interruption

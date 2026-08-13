@@ -70,11 +70,22 @@ created; the parent bead is worked directly (the single-unit path in Phase 4).
 After approval, slug the title (kebab-case, ≤30 chars) and set up:
 
 ```bash
+git checkout main
+git fetch origin main
+git merge --ff-only origin/main          # branch from current code, not a stale main
 git worktree add ../bd-<id>-<slug> -b bd-<id>-<slug>
 cd ../bd-<id>-<slug>
 bd sync                                  # writes the worktree redirect, rebuilds from issues.jsonl
 bd update <id> --status in_progress && bd sync
 ```
+
+The fetch matters twice over here. `git worktree add` branches from whatever
+`main` points at with no complaint about its age, and `bd sync` rebuilds the
+bead graph from `issues.jsonl` — which lives on `main`, so a stale checkout
+gives a stale graph as well as a stale base. `--ff-only` rather than `pull`: a
+diverged `main` is a state to report, not one to resolve on the user's behalf.
+Re-check the bead is still open here if the approval in Phase 3 took a while
+(`bd show <id>`); the gh sibling learned that the hard way.
 
 `bd sync` is what wires beads to the worktree: one database lives in the main
 checkout, and the worktree reaches it through a local `.beads/redirect`. If
