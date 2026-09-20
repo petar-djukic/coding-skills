@@ -131,9 +131,31 @@ what differs.
 
 4. **Commit and push.** Code commits must name the PRDs they implement.
 
+   The commit embeds the sub-issue's Requirements, Acceptance Criteria, and
+   Design Decisions, copied from the issue body — not re-summarized. Issues
+   do not follow a repository across an org migration; the commit is where
+   the planning record survives. The URL trailers carry full URLs for the
+   same reason: `#N` stops resolving after a move, the URL still names the
+   source.
+
    ```bash
    git add -A
-   git commit -m "<what changed> (GH-<parent>)
+   git commit -F - <<'EOF'
+   <what changed> (GH-<parent>)
+
+   <why this change: the problem the unit solves, one or two sentences>
+
+   ## Requirements
+
+   <the sub-issue's Requirements, verbatim>
+
+   ## Acceptance Criteria
+
+   <the sub-issue's Acceptance Criteria, verbatim>
+
+   ## Design Decisions
+
+   <the sub-issue's Design Decisions, verbatim — omit the section when the issue has none>
 
    Closes #<sub-issue>
 
@@ -142,10 +164,19 @@ what differs.
      Lines of code (Go, tests):      <test_loc> (+<delta>)
      Words (documentation):          <doc_words> (+<delta>)
 
+   Issue-URL: https://github.com/<owner>/<repo>/issues/<sub-issue>
+   Epic-URL: https://github.com/<owner>/<repo>/issues/<parent>
    Skill: do-work
-   Called-by: gh-issue-pop"   # beads mode: Called-by: bd-issue-pop
+   Called-by: gh-issue-pop
+   EOF
    git push
    ```
+
+   Single-issue path: the unit is the parent, so drop `Epic-URL:` and point
+   `Issue-URL:` at the parent. **Beads mode:** replace the two URL trailers
+   with `Bead: <child-id>` and `Epic-Bead: <epic-id>` (beads have no URLs;
+   the ids are stable in `issues.jsonl`), keep `Closes` out per the beads
+   rule above, and use `Called-by: bd-issue-pop`.
 
 5. **File follow-up work** you found: `gh issue create`, or
    `bd create "<title>" --label <epic-id>`.

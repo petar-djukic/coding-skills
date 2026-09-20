@@ -120,16 +120,30 @@ gh api repos/<owner>/<repo>/issues/<parent-number>/sub_issues \
 With exactly one, skip sub-issue creation and claim the parent instead:
 `gh issue edit <number> --repo <owner>/<repo> --add-assignee @me`.
 
-Either way, commit the marker and push:
+Either way, commit the marker and push. The marker embeds the **epic issue
+body verbatim**: issues do not follow a repository across an org migration,
+so the commit is where the planning record survives. Copy the body as
+written — do not summarize or trim it. `Issue-URL:` is the full URL, not
+`#N`; after a migration the number no longer resolves, the URL still names
+the source.
 
 ```bash
 cd ../gh-<number>-<slug>
-git commit --allow-empty -m "Pop GH-<number>: <title> into worktree
+git commit --allow-empty -F - <<'EOF'
+Pop GH-<number>: <title> into worktree
 
-Sub-issues: <comma-separated #N>      # omit on the single-issue path
+## Epic GH-<number>
 
+<the epic issue body, verbatim>
+
+## Sub-issues
+
+- #<n>: <title>          # one line per sub-issue; omit the section on the single-issue path
+
+Issue-URL: https://github.com/<owner>/<repo>/issues/<number>
 Skill: gh-issue-pop
-Called-by: <invoking skill, or 'user' if run directly>"
+Called-by: <invoking skill, or 'user' if run directly>
+EOF
 git push -u origin gh-<number>-<slug>
 ```
 
@@ -249,8 +263,12 @@ A GitHub issue is recurring if its title starts with "Recurring:" or its body co
 
 Each skill records provenance as git trailers on the commits it authors, so `git log` reconstructs which skills ran and which called which — no separate log file.
 
-- `gh-issue-pop` marker commits carry `Skill: gh-issue-pop` and `Called-by: <invoking skill, or 'user'>`.
-- `do-work` implementation commits carry `Skill: do-work` and `Called-by: gh-issue-pop`.
+- `gh-issue-pop` marker commits carry `Skill: gh-issue-pop`, `Called-by: <invoking skill, or 'user'>`, and `Issue-URL: <full epic URL>`, and embed the epic issue body verbatim.
+- `do-work` implementation commits carry `Skill: do-work`, `Called-by: gh-issue-pop`, `Issue-URL: <full sub-issue URL>`, and `Epic-URL: <full parent URL>`, and embed the sub-issue's Requirements, Acceptance Criteria, and Design Decisions.
+
+The URL trailers are what keep the trace resolvable after a repository
+migrates to another org: issue numbers stay behind, full URLs still name the
+source.
 
 View the roster and the call graph:
 
