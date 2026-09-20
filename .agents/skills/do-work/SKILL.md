@@ -196,7 +196,9 @@ what differs.
    clearly marked as technical debt: an open issue labeled `tech-debt`
    titled `Tech debt: <area>`. Attach the follow-up as its sub-issue the
    same way; create that epic first when none exists
-   (`gh issue create --label tech-debt`).
+   (`gh issue create --label tech-debt`). The pop skill's Phase 5 closes that
+   epic again once its last sub-issue closes, so the next follow-up that finds
+   no open one opens a fresh epic for its own batch.
 
    Beads mode: `bd create "<title>" --label <epic-id>` with this epic's id,
    or the tech-debt epic's id.

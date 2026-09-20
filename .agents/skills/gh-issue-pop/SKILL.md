@@ -234,7 +234,30 @@ work is done; on the multi-sub-issue path, when every sub-issue is closed.
    Anything still open, warn the user and close it explicitly with
    `gh issue close <N> --comment "Completed via PR #<pr>. Auto-close did not trigger."`
 
-6. Report the PR URL and confirm all issues are closed.
+6. **Close a drained tech-debt epic.** `do-work` files out-of-scope follow-ups
+   under an open epic labeled `tech-debt` and creates that epic when none is
+   open, but nothing closes it again. An epic whose last sub-issue just closed
+   is finished work that still reads as outstanding in `gh issue list`, so
+   close it here rather than leaving it for the operator to notice:
+
+   ```bash
+   parent=$(gh api repos/<owner>/<repo>/issues/<number> \
+     --jq '.parent_issue_url // empty' | grep -oE '[0-9]+$')
+   [ -n "$parent" ] && gh api repos/<owner>/<repo>/issues/"$parent" --jq '
+     select(.state == "open")
+     | select([.labels[].name] | index("tech-debt"))
+     | select(.sub_issues_summary.total > 0
+              and .sub_issues_summary.completed == .sub_issues_summary.total)
+     | .number'
+   ```
+
+   A number means the epic drained: close it with
+   `gh issue close "$parent" --comment "Drained: every sub-issue closed. Re-create a tech-debt epic when the next follow-up needs a home."`
+   No output means the issue had no parent, the parent is not a tech-debt
+   epic, or sub-issues remain open — leave it alone. An epic with no
+   sub-issues at all has not drained and stays open.
+
+7. Report the PR URL and confirm all issues are closed.
 
 **Note:** Phase 5 may happen in a later session. When running `/do-work` and closing the last sub-issue, check the open sub-issue count and execute Phase 5 automatically if it reaches 0.
 
