@@ -110,15 +110,27 @@ bd sync
 For a single-unit breakdown, create no children; `/do-work` works the parent
 bead directly.
 
-Commit the marker on the branch and push:
+Commit the marker on the branch and push. The marker embeds the **epic
+bead's body verbatim** (`bd show <id>`): the commit is where the planning
+record survives when the history moves without its tracker. Copy the body
+as written — do not summarize or trim it.
 
 ```bash
-git commit --allow-empty -m "Pop <id>: <title> into worktree
+git commit --allow-empty -F - <<'EOF'
+Pop <id>: <title> into worktree
 
-Children: <child ids>          # omit when there are none
+## Epic <id>
 
+<the epic bead's body, verbatim>
+
+## Children
+
+- <child-id>: <title>          # one line per child; omit the section when there are none
+
+Bead: <id>
 Skill: bd-issue-pop
-Called-by: <invoking skill, or 'user'>"
+Called-by: <invoking skill, or 'user'>
+EOF
 git push -u origin bd-<id>-<slug>
 ```
 
@@ -208,5 +220,8 @@ merge a stub branch.)
 
 Each skill records provenance as git trailers on the commits it authors:
 
-- `bd-issue-pop` marker commits carry `Skill: bd-issue-pop` and `Called-by: user`.
-- `do-work` implementation commits carry `Skill: do-work` and `Called-by: bd-issue-pop`.
+- `bd-issue-pop` marker commits carry `Skill: bd-issue-pop`, `Called-by: user`, and `Bead: <epic-id>`, and embed the epic bead's body verbatim.
+- `do-work` implementation commits carry `Skill: do-work`, `Called-by: bd-issue-pop`, `Bead: <child-id>`, and `Epic-Bead: <epic-id>`, and embed the child bead's Requirements, Acceptance Criteria, and Design Decisions.
+
+The id trailers keep the trace resolvable against `issues.jsonl` even when
+the history moves without its tracker database.
