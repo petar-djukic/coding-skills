@@ -1,6 +1,6 @@
 ---
 name: "do-work"
-description: "Work one unit from the epic you popped. Pick the workflow by deliverable:"
+description: "Work the units of the epic you popped, one at a time, until none remain."
 ---
 
 # do-work command
@@ -9,9 +9,12 @@ Apply this command workflow. Treat any text after its invocation as the command 
 
 # Command: Do Work
 
-Work one unit from the epic you popped. Pick the workflow by deliverable:
-**Documentation** for YAML under `docs/`, **Prose** for writing a person reads
-start to finish, **Code** for implementation.
+Work the units of the epic you popped, one at a time, until none remain.
+Pick each unit's workflow by deliverable: **Documentation** for YAML under
+`docs/`, **Prose** for writing a person reads start to finish, **Code** for
+implementation. Finishing a unit is not a stopping point — continue to the
+next open unit without asking. Stop only when the epic is done (Phase 5 has
+run) or when blocked on input only the user can give.
 
 ## Precondition — run inside a worktree
 
@@ -44,7 +47,7 @@ The steps below are written in gh mode. In beads mode substitute:
 | Log completion | `gh issue comment <n> …` | `bd comment <child-id> "Actual LOC: …"` |
 | Close a unit | `Closes #<n>` in the commit, auto-closes at merge | `bd update <child-id> --status done`, then `bd sync` |
 | All units done → PR | `/gh-issue-pop` Phase 5 | `/bd-issue-pop` Phase 5 |
-| File follow-up | `gh issue create` | `bd create "<title>" --label <id>` |
+| File follow-up | sub-issue of an epic ([Finishing a unit](#finishing-a-unit) step 5) | `bd create "<title>" --label <epic-id>` |
 
 Confirm `bd` flags against the installed version (`bd ready --help`).
 Everything else — how to write the doc or the code, the real-work bar, the
@@ -178,8 +181,31 @@ what differs.
    the ids are stable in `issues.jsonl`), keep `Closes` out per the beads
    rule above, and use `Called-by: bd-issue-pop`.
 
-5. **File follow-up work** you found: `gh issue create`, or
-   `bd create "<title>" --label <epic-id>`.
+5. **File follow-up work** you found — inside an epic, never free-floating.
+   A stray `gh issue create` leaves stragglers no epic ever picks up.
+
+   In scope for this epic — it becomes a sub-issue and joins this queue:
+
+   ```bash
+   gh issue create --repo <owner>/<repo> --title "<title>" --body "<body>"
+   gh api repos/<owner>/<repo>/issues/<parent>/sub_issues \
+     --method POST --field sub_issue_id=$(gh api repos/<owner>/<repo>/issues/<new-number> --jq '.id')
+   ```
+
+   Out of scope — technical debt, unrelated gaps — goes under an epic
+   clearly marked as technical debt: an open issue labeled `tech-debt`
+   titled `Tech debt: <area>`. Attach the follow-up as its sub-issue the
+   same way; create that epic first when none exists
+   (`gh issue create --label tech-debt`).
+
+   Beads mode: `bd create "<title>" --label <epic-id>` with this epic's id,
+   or the tech-debt epic's id.
+
+6. **Continue to the next unit.** Return to [Pick a unit](#pick-a-unit) and
+   claim the next open one — do not stop to ask, do not wait for another
+   invocation. The only exits from the loop are an empty queue (run
+   [Finishing the last unit](#finishing-the-last-unit)) and a question only
+   the user can answer.
 
 ## Finishing the last unit
 
@@ -191,7 +217,10 @@ When no open unit remains, before handing off:
 3. Run the full test suite.
 4. Evaluate use-case completion; if the criteria are met, mark it done in
    `road-map.yaml`.
-5. File follow-ups for gaps and technical debt.
+5. File follow-ups for gaps and technical debt, placed per step 5 of
+   [Finishing a unit](#finishing-a-unit) — into this epic only if you will
+   work them now (they reopen the queue and delay Phase 5), otherwise into
+   the tech-debt epic.
 6. If implementation revealed design changes, ask before editing architecture
    or PRD docs.
 7. **Execute the matching pop command's Phase 5 in full** — it opens the PR,
@@ -307,7 +336,9 @@ Push after every commit. Run `mage stats` and include the full Stats block
 where the repo defines that target; where it does not, count the diff and
 report the same fields. Update `road-map.yaml` when a use case completes.
 
-When no open unit remains — sub-issue count reaches zero, or
+One `do-work` invocation drains the whole queue: unit, next unit, next —
+the loop in [Finishing a unit](#finishing-a-unit) step 6 runs without pauses
+between units. When no open unit remains — sub-issue count reaches zero, or
 `bd ready --label <id>` returns nothing for this epic — run the matching pop
-command's Phase 5 automatically. The last `do-work` pass finishes the epic end
-to end.
+command's Phase 5 automatically. A single `do-work` pass finishes the epic
+end to end.
