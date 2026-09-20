@@ -134,10 +134,11 @@ EOF
 git push -u origin bd-<id>-<slug>
 ```
 
-## Working the epic — run `/do-work` repeatedly
+## Working the epic — run `/do-work` once
 
-Popping built the worktree and the bead graph; `/do-work` does the work, one
-ready child per pass, on the shared branch. It detects beads mode, takes the
+Popping built the worktree and the bead graph; `/do-work` does the work,
+child after child without stopping between them, on the shared branch. It
+detects beads mode, takes the
 next child from the parent-scoped queue (`bd ready --label <id>`), implements
 it under the real-work bar (no stubs), records `Actual LOC`, and closes it with
 `bd update --status done`, which unblocks its dependents.

@@ -148,7 +148,7 @@ Report the parent issue URL, and the sub-issue URLs if there are any.
 
 ### Epics and further breakdown
 
-After `gh-issue-pop`, run `/do-work` — repeatedly for a multi-sub-issue epic (one sub-issue per pass) until every sub-issue is closed, then Phase 5 opens the PR. Decomposition is one level deep and one worktree per epic.
+After `gh-issue-pop`, run `/do-work` once — it works the sub-issues one after another without stopping between them, and when the last one closes, Phase 5 opens the PR. Decomposition is one level deep and one worktree per epic.
 
 `/do-work` routes each sub-issue by deliverable: documentation, prose, or code. A sub-issue whose output is prose a person reads — a paper section, a README, a post — takes the Prose workflow, which learns the repository's voice from `writing-voice/` before drafting and scans the result with filter-tells. Nothing changes in a repository without that directory.
 
