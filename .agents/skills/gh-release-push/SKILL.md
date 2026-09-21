@@ -47,7 +47,16 @@ branch=$(git branch --show-current)
    `git tag -d <new-tag> && git tag -a <new-tag> -m "<summary>"`. Print the
    summary.
 
-6. Push the branch and tags to `origin`. If `git remote | grep -q release`
+6. Verify the annotation before anything is pushed. If `mage -l` lists a
+   `tag:verify` target, run `mage tag:verify <new-tag>`; a non-zero exit
+   stops the release — re-annotate with a real summary and run it again, and
+   never push a tag it refuses. Where the repository has no such target,
+   hold the same bar yourself before pushing: the subject must not equal the
+   tag name and the summary must say what shipped. A tag's annotation is
+   often the only release record a repository has, and an annotation that
+   names only the tag records nothing.
+
+7. Push the branch and tags to `origin`. If `git remote | grep -q release`
    succeeds, also push to `release`.
 
    ```bash
@@ -58,9 +67,9 @@ branch=$(git branch --show-current)
    git push release --tags
    ```
 
-7. If the repo is a Go module, resolve the module path with `go list -m` and
+8. If the repo is a Go module, resolve the module path with `go list -m` and
    run `go get <module>@<new-tag>` to warm the Go module proxy. Report errors
    but do not fail the release.
 
-8. Report the tag name, branch, which remotes received the push, and the
+9. Report the tag name, branch, which remotes received the push, and the
    change summary.
