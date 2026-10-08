@@ -252,7 +252,7 @@ are the Documentation workflow.
 
 Task selection, the completion comment with `Actual LOC`, the commit and Stats
 block, and the last-unit Phase 5 handoff are all identical to the Documentation
-workflow. Only the writing differs, and only in two ways.
+workflow. Only the writing differs, and only in three ways.
 
 ### 1. Learn the voice before drafting
 
@@ -267,7 +267,19 @@ Do this before drafting, not after. A draft written without a target register
 and then corrected toward one keeps its original skeleton and reads like a
 translation. The samples are cheap to read and expensive to retrofit.
 
-### 2. Scan the prose before committing
+### 2. Stitch the joints after drafting
+
+A unit drafted paragraph by paragraph — SRD says, section contracts, any
+per-paragraph scheme — comes out correct and unflowing: each paragraph
+opens on its own thesis and takes no handoff from the one before, and
+every later gate in this workflow reads one paragraph at a time, so
+nothing downstream catches it. When the deliverable is more than a few
+paragraphs, **invoke the `stitch-flow` skill** after the draft, and again
+after any assembly pass that moves paragraphs. Its detector locates the
+weak joints, the pass rewrites openings only, and its own gates include a
+cold review of the result. A single-paragraph unit needs none of this.
+
+### 3. Scan the prose before committing
 
 **Invoke the `filter-tells` skill** on your own output. Prose written by a
 model is exactly what its detectors exist for, and shipping unchecked because
@@ -281,7 +293,7 @@ When the prose has to stop sounding model-written and rewriting it yourself is
 not getting there, **invoke `match-voice`**: it sends the passage to a
 different model family with the same anchors and gates the result.
 
-### 3. External check (optional, usually skipped)
+### 4. External check (optional, usually skipped)
 
 `filter-tells` is a denylist you have just been writing against, so its silence
 is weak evidence that the prose reads as human. Its external-detector step is
