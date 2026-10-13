@@ -39,7 +39,16 @@ git fetch origin
 git ls-remote --heads origin exp/<slug>     # does it already exist?
 ```
 
-**Join** (the branch exists): `git worktree add ../exp-<slug> exp/<slug>`. If
+**Join** (the branch exists): create the worktree with the git-crypt-aware
+sequence — the conditional is a no-op in an unenrolled repository:
+
+```bash
+git worktree add --no-checkout ../exp-<slug> exp/<slug>
+if [ -d .git/git-crypt ]; then ln -s ../../git-crypt .git/worktrees/exp-<slug>/git-crypt; fi
+git -C ../exp-<slug> checkout exp/<slug>
+```
+
+If
 the worktree holds `.exp-sync.yaml`, it is remote-backed — read it and rebuild
 the sync remote on this machine from its `remote_name` and `remote_url`
 (Phase 3 step 2). Report the join and print the Phase 4 sync commands.
@@ -47,7 +56,9 @@ the sync remote on this machine from its `remote_name` and `remote_url`
 **Create** (it does not): branch, init beads, commit the marker.
 
 ```bash
-git worktree add ../exp-<slug> -b exp/<slug>
+git worktree add --no-checkout ../exp-<slug> -b exp/<slug>
+if [ -d .git/git-crypt ]; then ln -s ../../git-crypt .git/worktrees/exp-<slug>/git-crypt; fi
+git -C ../exp-<slug> checkout    # the conditional serves git-crypt repos; a no-op elsewhere
 cd ../exp-<slug>
 bd init
 git add -A

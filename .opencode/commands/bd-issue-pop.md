@@ -72,7 +72,9 @@ After approval, slug the title (kebab-case, ≤30 chars) and set up:
 git checkout main
 git fetch origin main
 git merge --ff-only origin/main          # branch from current code, not a stale main
-git worktree add ../bd-<id>-<slug> -b bd-<id>-<slug>
+git worktree add --no-checkout ../bd-<id>-<slug> -b bd-<id>-<slug>
+if [ -d .git/git-crypt ]; then ln -s ../../git-crypt .git/worktrees/bd-<id>-<slug>/git-crypt; fi
+git -C ../bd-<id>-<slug> checkout        # the conditional serves git-crypt repos (the filter looks for the key in the worktree's own git dir); a no-op elsewhere
 cd ../bd-<id>-<slug>
 bd sync                                  # writes the worktree redirect, rebuilds from issues.jsonl
 bd update <id> --status in_progress && bd sync
