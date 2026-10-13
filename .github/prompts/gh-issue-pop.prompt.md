@@ -99,8 +99,16 @@ After user approval:
 3. Create a git worktree with a new branch:
 
    ```bash
-   git worktree add ../gh-<number>-<slug> -b gh-<number>-<slug>
+   git worktree add --no-checkout ../gh-<number>-<slug> -b gh-<number>-<slug>
+   if [ -d .git/git-crypt ]; then ln -s ../../git-crypt .git/worktrees/gh-<number>-<slug>/git-crypt; fi
+   git -C ../gh-<number>-<slug> checkout
    ```
+
+   The conditional serves git-crypt repositories, where a plain
+   `git worktree add` dies in the smudge filter: the key lives in the shared
+   git dir and the filter looks in the worktree's own. In an unenrolled
+   repository it is a no-op and the sequence equals plain `git worktree add`.
+
    The worktree lives at `../gh-<number>-<slug>` (sibling of the current repo directory).
    All subsequent work happens inside this worktree. Record the path: `WT=../gh-<number>-<slug>`
 
