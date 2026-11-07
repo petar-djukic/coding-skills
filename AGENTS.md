@@ -31,11 +31,15 @@ experiment branches, which never merge to `main`.
 
 Codex discovers both from `.agents/skills/`.
 
+Reusable skills (21): accent-dial, audit-references, bake-off, cold-review, critic-apply, critic-panel, filter-tells, humanize, inject-vernacular, match-outline, match-structure, match-voice, patent-disclosure, pattern-language, polish-prose, reverse-outline, stitch-flow, tighten-style, tune-anchors, update-references, voice-critic.
+
 Command workflows (14), each carrying its full workflow inline: align-specs, bd-issue-pop, bd-issue-push, bd-issue-show, bootstrap, do-work, exp-start, exp-stop, gh-issue-pop, gh-issue-push, gh-issue-show, gh-release-push, make-work, test-clone.
 
 Python-backed skills run in a pixi environment that ships beside them:
 run `.agents/scripts/ensure-env.sh` once per machine, then invoke scripts
 with `pixi run --manifest-path .agents/pixi.toml python <script>`.
+API credentials resolve through the repository's gitignored `.secrets/`
+directory, never from the skills tree — see the secrets rule below.
 
 ## Conventions
 
@@ -46,6 +50,9 @@ These are summaries; the canonical rule files hold the detail.
 - **Pixi for Python** — We use pixi (https://pixi.sh/) to manage Python environments and dependencies. See `.claude/rules/pixi-python.md`.
 - **README Format** — README files are the public interface of a repository. See `.claude/rules/readme-format.md`.
 - **Response Style** — Default to cliffnotes. See `.claude/rules/response-style.md`.
+- **The `.secrets/` Directory Contract** — API credentials belong to the repository you are working in, never to the skills. See `.claude/rules/secrets.md`.
+- **Technical Document Types** — We catalog the document types of standards bodies and engineering practice. See `.claude/rules/technical-document-types.md`.
+- **The `writing-voice/` Directory Contract** — Any writing repository may carry a `writing-voice/` directory of exemplar samples that define the target voice for text generated in that repository. See `.claude/rules/writing-voice.md`.
 
 Before committing, run the repository's consistency check if it defines
 one, and commit after each round of edits rather than accumulating them.
