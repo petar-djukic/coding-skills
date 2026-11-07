@@ -1,0 +1,357 @@
+# The `writing-voice/` Directory Contract
+
+Any writing repository may carry a `writing-voice/` directory of exemplar
+samples that define the target voice for text generated in that repository.
+The prose skills read it: `filter-tells` measures drafts against it and steers
+rewrites toward it, and `match-structure` accepts it as a curated exemplar source.
+The contract is generic — the same layout works in any repository.
+
+## Layout
+
+```
+writing-voice/
+  manifest.yaml                 the contract below
+  <Author>-<Year>-<slug>.md     one markdown file per exemplar
+  blueprints/<name>.md          structural blueprints for match-outline (optional)
+  venues/<name>.yaml            venue profiles, schema below (optional)
+  .voice-profile.json           generated cache (gitignorable)
+```
+
+One markdown file per exemplar, plus the manifest. Sample files carry prose,
+not markup scaffolding — a converted paper is fine, a LaTeX source is not
+(convert it first).
+
+## `manifest.yaml`
+
+```yaml
+purpose: >
+  What these samples are for, in this repository.
+updated: '2026-07-25'
+target_document: the work whose voice these samples define
+roles:
+  author-voice: Written or co-written by the repository owner before the
+    generative-AI era; the primary voice to match.
+  venue-voice: Not by the author, published before 2022 in the target venue's
+    genre; establishes the register of the venue.
+exemplars:
+  - id: djukic-2007-icc-distributed-scheduling   # stable key
+    file: Djukic-2007-distributed-link-scheduling-...md   # relative to writing-voice/
+    role: author-voice                            # author-voice | venue-voice
+    author: Djukic                                # optional; else the filename
+    venue: IEEE ICC
+    year: 2007
+    source: papers/Djukic-2007-...md              # where the sample came from
+    notes: Conference register; distributed-algorithm exposition, compact
+      problem statement, simulation-backed claims.
+```
+
+Required per exemplar: `id`, `file`, `role`. `venue`, `year`, `source`,
+`author`, and `notes` are recommended — `author` is the person who wrote the
+piece (used by `--author` to hard-pin retrieval to one writer's voice, and
+read off the filename when the field is absent), and
+`notes` is read by humans choosing exemplars and by the anchor-retrieval step
+when ranking ties.
+
+## Two independent axes
+
+`role` says **whose voice** a sample is. `pre_ai` says **whether it is safe to
+anchor diction on**. They are independent, and the first cannot express
+the second:
+
+| Stratum | role | anchor for |
+|---|---|---|
+| author papers, pre-AI | `author-voice` | diction, precision |
+| peer essays, pre-AI | `venue-voice` | diction **and punch** |
+| anything AI-era | either | genre and structure only, **never diction** |
+
+`--role venue-voice` returns the pre-AI punch anchors and the AI-era samples
+together — the ones that must never anchor diction. `--stratum pre-ai` cuts
+across roles and returns only what is safe.
+
+```yaml
+- id: yegge-2011-google-platforms-rant
+  file: Yegge-2011-stevey-s-google-platforms-rant.md
+  role: venue-voice
+  year: 2011
+  pre_ai: true        # optional; absent, inferred from year < 2022
+```
+
+Prose written once generative AI was available may carry AI diction, which
+makes it circular as a diction anchor. `pre_ai` is optional and the year infers
+it, but an explicit value wins: where the line falls for a given piece is the
+curator's knowledge, not arithmetic — a 2023 draft may predate their model
+access, and a 2021 one may not.
+
+## The third axis: register tags
+
+`role` says whose voice. `pre_ai` says whether its diction is safe to copy.
+Neither answers **which register suits this article**, and retrieval cannot
+supply it — embedding similarity matches topic, and the register that fits is
+often the one *least* topically similar, so similarity ranks it last.
+
+Measured on a 113-exemplar corpus: for an economics paragraph, the eleven
+Krugman samples ranked no better than 25th of 2,420 passages, because Krugman
+writes about copper and hot dogs while the draft was about software.
+
+```yaml
+- id: krugman-1998-the-accidental-theorist
+  role: venue-voice
+  year: 1998
+  tags: [economics, numbers, parable, diction]
+- id: fowler-2015-technical-debt
+  role: venue-voice
+  year: 2015
+  tags: [medium, named-pattern, structure-only, workflow]
+  pre_ai: false
+```
+
+Tags **select the pool**; similarity still ranks within it. Pass none and
+behaviour is unchanged.
+
+`structure-only` is a tag with teeth: it means *anchor shape on this, never
+diction*. Samples carrying it are excluded from diction anchoring unless
+requested by name, because otherwise `--anchor-tags workflow` would quietly
+admit a shape reference into a voice rewrite. Fowler's bliki is the worked
+case — a legitimate structure reference whose clean modern prose is the
+register a rewrite is escaping.
+
+The A/B behind this (GH-229), one article and one model: tag-selected anchors
+took a published piece from an external score of 100% to 17.9% and held the
+passive rate at the author's own level, where similarity-selected anchors
+moved the score not at all and nearly doubled passive. The tag arm rewrote
+*fewer* paragraphs to get there.
+
+Articles usually carry the query already — front matter `tags:`, and in some
+repositories `Altitude:` / `Move:` from `pattern-language.yaml`.
+
+## The fourth axis: author identity
+
+`role` says whose voice *category* a sample belongs to; it does not say which
+*person* wrote it. A `venue-voice` pool mixes many authors, and `--role
+venue-voice` returns them all. `author` says **which specific person** wrote
+the piece, and `--author Yegge` hard-pins retrieval to that person's
+exemplars regardless of role.
+
+```yaml
+- id: yegge-2011-google-platforms-rant
+  file: Yegge-2011-stevey-s-google-platforms-rant.md
+  role: venue-voice
+  author: Yegge
+  year: 2011
+```
+
+The `pre_ai` gate still applies: `--author Yegge` selects Yegge's samples,
+and `--stratum pre-ai` further restricts to the ones safe for diction
+anchoring. The axes are independent — author picks WHO, stratum governs
+WHETHER their words are safe to copy.
+
+### Where the author comes from
+
+The `author:` field is authoritative, and where it is absent the **filename
+supplies one**: the first hyphen-separated segment, when it starts with a
+letter. `Krugman-1998-the-accidental-theorist.md` is Krugman whether or not
+the manifest says so, and a declared field always wins — adding `author:` to a
+manifest refines it, never changes what it already meant.
+
+Letter-initial is the whole gate. `2026-08-20-strategy-theatre.md` yields no
+author rather than one called `2026`. It deliberately does **not** require a
+four-digit year: on the reference corpus that stricter form missed 13 of 181
+exemplars, among them all ten Dijkstra essays, which carry EWD numbers where a
+year would go. A gate that drops the author it was asked for is the failure it
+exists to prevent.
+
+Inference is disclosed wherever it is used — the anchor pool line reads
+`author=Krugman (inferred from filenames)` — so a reader never mistakes it for
+something the manifest states. `voice_anchors.py tags` lists every author the
+corpus can express and marks each `declared` or `inferred`.
+
+### When `--author` selects nothing
+
+`--author` that matches nothing yields an empty pool, not a fallback to the
+full corpus. An author value that excludes nothing (every exemplar carries
+that author) is reported as inert.
+
+Two emptinesses, and they need opposite responses, so they are reported
+differently. A name the corpus does not hold is answered with the names it
+does. A corpus that can express no author at all — no `author:` field
+anywhere, no filename implying one — is answered by saying the flag cannot
+work here whatever is passed, and pointing at `--anchor-tags` instead.
+Collapsing the two costs a debugging detour: the corpus loads, the tag listing
+reports every exemplar, so a path problem is the natural first hypothesis and
+the manifest fields are the last thing anyone reads.
+
+## Roles and precedence
+
+`author-voice` is the voice to match; `venue-voice` supplies genre convention
+where the author has no sample in that form. Tools prefer `author-voice`
+anchors and fall back to `venue-voice`. A repository may carry only one role.
+
+## Discovery
+
+A tool given a file walks up from that file's directory to the repository root
+looking for `writing-voice/`. Absent, behavior is unchanged — voice features
+are additive, never required.
+
+## `venues/` — venue profiles
+
+A profile is one YAML file under `writing-voice/venues/` bundling every choice
+the humanize pipeline otherwise asks for interactively. One profile per
+publishing venue the repository writes for. Discovery follows the same walk-up
+rule as `writing-voice/` itself, so a paper repository carrying its own
+`writing-voice/venues/academic.yaml` resolves without cross-repo
+configuration.
+
+Profiles are **named bundles, not a linear dial**. Register axes do not move
+together across venues — the book profile removes all hedging while the
+academic profile carries the most — so consumers read fields, never infer
+them from `level`.
+
+```yaml
+name: newsletter          # must match the filename stem
+level: 1                  # 1 newsletter | 2 technical-essay | 3 book
+                          # 4 industry-report | 5 academic — ordering label only
+description: >
+  Substack posts: first person, coaching voice, punch anchors.
+anchor_query:             # manifest query for voice anchors
+  role: venue-voice       # optional: author-voice | venue-voice
+  tags: [first-person, clipped]
+  stratum: pre-ai         # optional: pre-ai | ai-era
+  author: Yegge           # optional hard pin
+blueprint: evans-howto.md # under blueprints/, or omit
+structural_step: tighten-style   # match-outline | tighten-style | skip
+pov: first-person         # first-person | third-person | mixed-sidebars
+citations: numbered       # numbered | pandoc | none
+tell_lexicon: newsletter  # newsletter | academic | industry | book | none
+hedge_policy: minimal     # zero (book) | minimal (essay) | calibrated (academic)
+targets:                  # measured register targets; keys are match-structure
+  sentence_length_mean: 17.4        # METRIC_KEYS — bootstrap them with
+  passive_per_100_sentences: 4.1    # `style.py corpus` over the venue slice,
+  hedges_per_1000_words: 1.2        # never hand-write them
+targets_provenance:
+  measured: '2026-07-29'
+  corpus: {role: venue-voice, tags: [first-person, clipped]}
+  papers: 24
+gates:                    # ordered acceptance checks with optional thresholds
+  - name: pangram
+    max_ai_fraction: 0.5
+  - name: pace
+  - name: register-composite
+  - name: citation-number-preservation
+  - name: audit-references
+provenance:               # written back by tune-anchors after a sweep
+  anchor_query_source: tune-anchors   # or: hand
+  swept: '2026-07-29'
+  composite: 0.81
+```
+
+Required: `name`, `level`, `structural_step`, `citations`, `tell_lexicon`,
+`hedge_policy`, `gates`. Loader and validator:
+`match-structure/scripts/venue_profile.py` (`discover` / `list` / `show` /
+`validate`); consumer skills import `resolve()` or shell out to `show`.
+A profile with schema errors is refused, not partially applied.
+
+Field semantics for consumers:
+
+- `anchor_query` — resolves humanize's seed anchor selection (humanize
+  `--venue`).
+- `blueprint` / `structural_step` — name the caller's pre-chain structural
+  step (GH-208): the workflow runs match-outline (or tighten-style, or
+  skips) before invoking humanize; humanize only reports whether it ran.
+- `tell_lexicon` — selects which venue lexicon filter-tells applies on top of
+  its core tells; core tells are venue-independent.
+- `targets` + `hedge_policy` — tighten-style tightens toward these numbers
+  instead of the global author floor; hedge handling is venue-keyed.
+- `gates` — which acceptance checks run and in what order; a venue without
+  `pangram` in its gate list is never uploaded to an external detector
+  (the consent rule below still governs every upload for venues that do).
+- `citations` — pandoc `[@citekey]` and numbered `[1]` markers must survive
+  every rewrite step verbatim.
+
+## Consumers
+
+- **filter-tells** — builds a baseline profile from the samples (metrics reported as
+  distances from it, not only against fixed thresholds) and injects
+  topically-nearest exemplar passages into rewrite and overshoot prompts as
+  voice anchors. With `idiolect.yaml` present, its structural pass calibrates
+  to the author baseline: native constructions flag only above the author
+  ceiling, never on sight.
+- **inject-vernacular** — the terminal, non-generative stage: applies
+  `idiolect.yaml`'s operator bank (substitution/restoration only, nothing
+  samples) at essay targets, keeps an edit log for marker-survival analysis,
+  and refuses to run without the bank. Accepts a voice-critic report's
+  unhedged-prediction flags to gate the i-think RESTORE direction.
+- **voice-critic** — cold, read-only gatekeeper whose rubric is
+  `voice-constitution.md` and whose marker rates come from `idiolect.yaml`:
+  five per-dimension verdicts with flagged spans (stance, ToM device,
+  disproportion via span locks, computed marker profile, the L0–L5 snark
+  audit), plus the unhedged-prediction work list inject-vernacular consumes.
+  Never edits.
+- **match-outline** — accepts the manifest as a curated exemplar source for
+  whole-document structural rewriting, blueprint synthesis, and comparison.
+- **match-structure** — provides the quantitative metrics, corpus aggregation,
+  and voice anchor retrieval that match-outline and other skills import.
+- **match-voice** — retrieves the same anchors and sends them with the
+  paragraph to a second model family, then gates the candidate on citation and
+  number preservation, meaning entailment, anchor similarity, and register. Its
+  driver carries the before/after Pangram measurement, since the baseline can
+  only be captured before the rewrite starts.
+- **do-work** — its Prose workflow reads the manifest and the nearest samples
+  before drafting, and scans the produced prose with filter-tells before committing,
+  so a writing repository gets the rule from the workflow rather than from a
+  per-repo note. Repositories without `writing-voice/` are unaffected.
+
+- **Pangram check** — an optional external measurement, and the only consumer
+  that sends text off the machine. Governed by the consent rule below.
+- **filter-tells's eval harness** — uses the `author-voice` exemplars as the human
+  class when calibrating detector false-positive rates. It reads them in place
+  and records provenance rather than text, so a private corpus stays private;
+  the skills directory is shared by symlink, and samples copied into it would
+  be published with the skills. What belongs in the corpus is the curator's
+  call, but the harness warns about exemplars dated after 2022, since prose
+  written once generative AI was available is circular as ground truth for what
+  human prose looks like.
+
+Reference implementation of the directory: `petar-djukic/autogenic-systems`
+(`writing-voice/`, 28 exemplars — 24 `author-voice`, 4 `venue-voice`).
+
+## Uploading a draft to an external detector
+
+Every other tool here runs locally. `match-voice` prefers a local model
+precisely so unpublished prose stays on the machine. An external AI detector
+breaks that deliberately, so it asks first — every time.
+
+**Ask before every upload.** Name the file, name the destination
+(`text.external-api.pangram.com`), and say that the text is retained and
+reachable through a `dashboard_link` on the vendor's site. Proceed only on a
+clear yes.
+
+**Per document, every time — unless the operator has granted standing
+consent (GH-210).** Not once per session, not implied by a key. A key
+in the environment says the user has an account with the vendor; it says
+nothing about whether *this* document may leave the machine. Sessions cover
+many files, and one blanket yes given in passing cannot be informed consent
+for a file the user had not thought about yet. An upload cannot be taken back.
+
+The one exception is a deliberate, recorded, revocable grant: the operator
+writes `consent: standing` into `writing-voice/pangram-consent.yaml` (or
+sets `PANGRAM_CONSENT=standing`; `PANGRAM_CONSENT=off` revokes for a
+session and wins over the file). Under the grant the drivers score by
+default — the GH-194 recipe needs every pass scored — and `--no-pangram`
+opts any single run out. The grant covers the repository the file sits in,
+never other repositories; the retention warning above is what the operator
+accepts at grant time; and a venue profile whose gates omit `pangram`
+never uploads regardless of the grant. The refuse-list below applies with
+the grant in force: embargoed or NDA material still gets raised, not
+uploaded.
+
+**Refuse some documents even with consent in hand.** Anything under embargo or
+NDA, and any unpublished claim where disclosure could bear on prior art, gets
+raised rather than uploaded. The user may still say yes; they should say it
+knowing that.
+
+**No key, or a declined prompt, means skip.** Say the check was skipped. Never
+pass silently, and never present a local filter-tells result as though it were the
+external one — the whole value of an outside detector is that it is outside.
+
+**A result is evidence, not a verdict.** It never certifies a document on its
+own; see filter-tells's Verdict Validity Rules.

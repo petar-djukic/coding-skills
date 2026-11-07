@@ -96,10 +96,26 @@ inline_rules() {
 }
 
 # Canonical command files: real files, never symlinks. A checkout may link
-# another repository's commands into .claude/commands/ for local use, and the
-# glob dereferences them, so they would be copied into all four generated
-# surfaces and --check would then report drift forever against the committed
-# mirrors. They belong to the repository that owns them.
+# another repository's commands into .claude/commands/ for local use — the
+# coding workflow from coding-skills is the worked case — and the glob
+# dereferences them, so they were copied into all four generated surfaces and
+# --check then reported drift forever against the committed mirrors (GH-5).
+# They belong to the repository that owns them.
+# Every canonical skill file worth mirroring, relative to .claude/skills.
+#
+# Build caches are excluded here and nowhere else. They were excluded at three
+# separate call sites, which held only for as long as the one cache anyone had
+# seen: pytest later wrote .pytest_cache beside the match-voice tests, the copy
+# carried it into the generated surfaces, and --check reported drift against
+# the committed mirrors. `git status` stayed clean throughout, because pytest
+# writes a .gitignore containing `*` inside its own cache — so nothing pointed
+# at the cause. One list, one place to add the next one.
+skill_files() {
+  (cd "$ROOT/.claude/skills" && find . -type f \
+      ! -path '*/__pycache__/*' \
+      ! -path '*/.pytest_cache/*')
+}
+
 canonical_commands() {
   local f
   for f in "$ROOT/.claude/commands/"*.md; do
@@ -134,23 +150,28 @@ build_stage() {
     mkdir -p "$STAGE/$target/commands" "$STAGE/$target/skills"
     # commands: canonical body prefixed with front matter (description) so
     # Cursor/OpenCode display it. Files whose canonical form already has
-    # front matter are copied verbatim (no double wrap).
+    # front matter keep it (no double wrap). The skills prefix is rewritten
+    # to this surface, as it is for the skills tree below: a command copied
+    # verbatim still named .claude/skills/, so a repository mounting only
+    # .cursor had commands pointing at a tree it had not linked (GH-4).
     while IFS= read -r cmdfile; do
       name="$(basename "$cmdfile")"
       if head -1 "$cmdfile" | grep -q '^---$'; then
-        cp "$cmdfile" "$STAGE/$target/commands/$name"
+        sed "s|\.claude/skills/|$target/skills/|g" "$cmdfile" \
+          > "$STAGE/$target/commands/$name"
       else
         cdesc="$(extract_description "$cmdfile")"
         {
           printf -- '---\ndescription: "%s"\n---\n\n' "$cdesc"
-          cat "$cmdfile"
+          sed "s|\.claude/skills/|$target/skills/|g" "$cmdfile"
         } > "$STAGE/$target/commands/$name"
       fi
     done < <(canonical_commands)
-    # skills: copy tree, rewriting canonical path references; a repository
-    # carrying only commands has no skills directory and that is a normal state
+    # skills: copy tree, rewriting canonical path references
+    # A repository carrying only commands has no skills directory, and that is
+    # a normal state, not an error (GH-20).
     [[ -d "$ROOT/.claude/skills" ]] || continue
-    (cd "$ROOT/.claude/skills" && find . -type f ! -path '*/__pycache__/*') | while IFS= read -r rel; do
+    skill_files | while IFS= read -r rel; do
       local src="$ROOT/.claude/skills/$rel"
       local dst="$STAGE/$target/skills/$rel"
       mkdir -p "$(dirname "$dst")"
@@ -165,7 +186,12 @@ build_stage() {
   mkdir -p "$STAGE/.github/prompts" "$STAGE/.github/skills"
 
   # One prompt per command: the full canonical body inlined beneath generated
-  # front matter, so the prompt stands alone with no pointer to .claude.
+  # front matter, so the prompt stands alone with no pointer to .claude. The
+  # body takes the same rewrites as the skills copy below and as .agents —
+  # omitting them here was GH-1/GH-4: a command that named a skill script by
+  # its canonical path put a .claude/ string in the staged prompt, the
+  # self-containment guard caught it, and the script aborted before writing
+  # any mirror at all.
   local cmd desc
   while IFS= read -r cmd; do
     name="$(basename "$cmd" .md)"
@@ -174,7 +200,11 @@ build_stage() {
       printf -- '---\ndescription: "%s"\n---\n\n' "$desc"
       printf 'Execute the /%s command. The full workflow follows; treat any\n' "$name"
       printf 'text after the prompt invocation as its arguments ($ARGUMENTS).\n\n'
-      command_body "$cmd"
+      command_body "$cmd" | sed \
+        -e 's|\.claude/skills/|.github/skills/|g' \
+        -e 's|\.claude/commands/|.github/prompts/|g' \
+        -e 's|\.claude/rules/||g' \
+        -e 's|\.claude/||g'
     } > "$STAGE/.github/prompts/$name.prompt.md"
   done < <(canonical_commands)
 
@@ -183,9 +213,9 @@ build_stage() {
   # .cursor/.opencode copies (which keep a sibling .claude/ and rewrite only
   # the skills prefix), the .github copy must also flatten .claude/commands and
   # .claude/rules mentions — those files are not carried by a bare symlink.
-  # A commands-only repository has no skills directory; skip the copy.
+  # A commands-only repository has no skills directory; skip the copy (GH-20).
   [[ -d "$ROOT/.claude/skills" ]] && \
-  (cd "$ROOT/.claude/skills" && find . -type f ! -path '*/__pycache__/*') | while IFS= read -r rel; do
+  skill_files | while IFS= read -r rel; do
     local src="$ROOT/.claude/skills/$rel"
     local dst="$STAGE/.github/skills/$rel"
     mkdir -p "$(dirname "$dst")"
@@ -202,7 +232,11 @@ build_stage() {
   # resolves inside .github, so it survives a bare symlink.
   local skilldir sname sdesc
   for skilldir in "$ROOT/.claude/skills/"*/; do
-    [[ -d "$skilldir" ]] || continue
+    # An empty skills directory leaves the glob unexpanded, and the literal
+    # */ then reached awk as a filename. Found while testing the empty-area
+    # guard above (GH-18); the same emptying that produced that case produces
+    # this one.
+    [ -d "$skilldir" ] || continue
     sname="$(basename "$skilldir")"
     sdesc="$(extract_description "$skilldir/SKILL.md")"
     cat > "$STAGE/.github/prompts/$sname.prompt.md" <<EOF
@@ -267,9 +301,10 @@ EOF
   done < <(canonical_commands)
 
   # Reusable skill trees, with canonical path references rewritten to stay
-  # inside .agents. A commands-only repository has no skills directory.
+  # inside .agents.
+  # A commands-only repository has no skills directory; skip the copy (GH-20).
   [[ -d "$ROOT/.claude/skills" ]] && \
-  (cd "$ROOT/.claude/skills" && find . -type f ! -path '*/__pycache__/*') | while IFS= read -r rel; do
+  skill_files | while IFS= read -r rel; do
     local src="$ROOT/.claude/skills/$rel"
     local dst="$STAGE/.agents/skills/$rel"
     mkdir -p "$(dirname "$dst")"
@@ -288,9 +323,9 @@ EOF
   #
   # Everything below is enumerated from what this repository carries. It used
   # to be one fixed heredoc — the only part of this script not derived from
-  # .claude/ — so it went on linking technical-document-types.md after that
-  # rule moved to writing-skills in the August split (GH-383). A generated
-  # file asserting things that are not true is worse than no file.
+  # .claude/ — so after the split it named four commands and linked four rule
+  # files that exist in coding-skills and not here (GH-5). A generated file
+  # asserting things that are not true is worse than no file.
   local agents_names agents_count
   {
     cat <<'AGENTSEOF'
@@ -344,10 +379,14 @@ AGENTSEOF
         basename "$d"
       done | sort | awk '{printf "%s%s", sep, $0; sep=", "} END {print ""}'
     )"
-    # Guarded on the directory existing: a repository carrying only commands
-    # has no .claude/skills at all, git cannot track an empty directory, find
-    # exits non-zero on a missing path, and under `set -o pipefail` that failed
-    # the assignment and `set -e` killed the script before it printed anything.
+    # find, not `ls -d .../*/`: an unmatched glob makes ls exit non-zero, and
+    # under `set -o pipefail` that failed the assignment and aborted the whole
+    # script before it printed anything — an empty .claude/skills produced a
+    # silent exit 1 (GH-18). find reports an empty directory as zero results,
+    # but exits non-zero on a directory that is not there at all, which fails
+    # the same way: git cannot track an empty directory, so a repository that
+    # has emptied .claude/skills ships clones with no directory (GH-20, hit in
+    # coding-skills while porting this generator). Hence the guard.
     agents_count=0
     if [ -d "$ROOT/.claude/skills" ]; then
       agents_count="$(find "$ROOT/.claude/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
@@ -368,6 +407,10 @@ AGENTSEOF
     printf '\nPython-backed skills run in a pixi environment that ships beside them:\n'
     printf 'run `.agents/scripts/ensure-env.sh` once per machine, then invoke scripts\n'
     printf 'with `pixi run --manifest-path .agents/pixi.toml python <script>`.\n'
+    if [ -f "$ROOT/.claude/rules/secrets.md" ]; then
+      printf 'API credentials resolve through the repository'"'"'s gitignored `.secrets/`\n'
+      printf 'directory, never from the skills tree — see the secrets rule below.\n'
+    fi
 
     printf '\n## Conventions\n\n'
     printf 'These are summaries; the canonical rule files hold the detail.\n\n'
@@ -392,7 +435,9 @@ AGENTSEOF
   local surface
   for surface in .cursor .opencode .github .agents; do
     mkdir -p "$STAGE/$surface/scripts"
-    # A repository without Python-backed skills carries no pixi manifest.
+    # Guarded, so a repository with no Python-backed skills stages no manifest
+    # rather than dying here on a missing source — which would abort before the
+    # FILES loop below could remove the stale mirror copies.
     [[ -f "$ROOT/.claude/pixi.toml" ]] && cp "$ROOT/.claude/pixi.toml" "$STAGE/$surface/pixi.toml"
     [[ -f "$ROOT/.claude/pixi.lock" ]] && cp "$ROOT/.claude/pixi.lock" "$STAGE/$surface/pixi.lock"
     # Every shared script, not a hardcoded filename: naming one file meant the
@@ -468,13 +513,12 @@ fi
 drift=0
 for area in "${AREAS[@]}"; do
   # An area with no canonical content stages as an empty directory, and git
-  # cannot track one, so no committed tree can ever match it: --check reported
-  # drift on every clean checkout and sync left stray empty directories behind
-  # (GH-381). This repository hit it for all seven skills/scripts areas once
-  # the prose skills moved to writing-skills and .claude/skills and
-  # .claude/scripts were left empty. Empty stage against an absent or empty
-  # target is agreement. The FILES loop below already handles the equivalent
-  # case for single files.
+  # cannot track one, so no committed tree can ever match it: --check would
+  # report drift on every clean checkout and sync would leave stray empty
+  # directories behind. coding-skills hit this on all seven skills/scripts
+  # areas once the split emptied its .claude/skills and .claude/scripts
+  # (coding-skills GH-381, ported here as GH-18). Empty stage against an
+  # absent or empty target is agreement.
   if [[ -z "$(ls -A "$STAGE/$area" 2>/dev/null)" ]] &&
      [[ -z "$(ls -A "$ROOT/$area" 2>/dev/null)" ]]; then
     continue
