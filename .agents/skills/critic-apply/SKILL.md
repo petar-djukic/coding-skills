@@ -51,6 +51,19 @@ rules decide, and the rules are arguable because they are deterministic.
   gated rejection keeps the original, recorded with its reason.
 - **Deletions apply directly** with mechanical punctuation
   normalization; omission is not authorship.
+- **Every accepted target in a paragraph applies**, in document order,
+  each to the text the previous one left, with the gate run on each step
+  (GH-430). One edit per paragraph per pass used to leave most targets
+  unapplied: 22 of 23 in one Loom round, the same ones every round. A
+  target whose quote an earlier edit consumed is recorded
+  `kept-quote-gone-after-edit`; one after its paragraph was cut,
+  `kept-paragraph-deleted`. Length does not compose step by step, so a
+  chain without a cut is checked against the original paragraph at the
+  end and rolled back to its longest prefix inside the 0.5–1.35× band,
+  the dropped steps recorded `kept-chain-drift`.
+- **Paragraphs run concurrently** (`--jobs`, default 4; 1 is sequential).
+  Each model call still carries one paragraph and one sentence, and the
+  output does not depend on `--jobs`.
 
 ## Usage
 
@@ -59,7 +72,7 @@ python3 <skill>/scripts/critic_apply.py \
   --article draft.md --sheet draft.critic-sheet.md \
   [--protected constitution-spans.txt] \
   [--cheap-paragraphs 3,7] \
-  [--dry-run]
+  [--jobs 4] [--dry-run]
 ```
 
 Output: `<stem>.applied.md` plus `<out>.critic-apply.json` — per-target

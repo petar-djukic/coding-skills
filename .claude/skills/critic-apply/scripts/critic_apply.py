@@ -24,7 +24,9 @@ instruction through the rewrite transport, never persona prose spliced
 in; every candidate passes a mechanical gate (number multiset, citation
 multiset, em-dash/colon budget, 0.5–1.35 size band) or the original is
 kept; deletions apply directly with mechanical punctuation
-normalization.
+normalization. Every accepted target in a paragraph applies, in document
+order, each to the text the previous one left (GH-430); paragraphs run
+concurrently (--jobs).
 """
 
 import argparse
@@ -194,96 +196,160 @@ def build_prompt(par_clean, quote, instruction):
             f"Paragraph:\n{par_clean}")
 
 
-def decide_and_apply(article_text, targets, generate=None,
-                     protected=(), cheap=frozenset()):
-    """The whole policy. Returns (new_text, records)."""
-    parsed = md_paragraphs.parse(article_text)
-    paras = parsed.paragraphs
-    records, edits = [], {}   # n -> replacement text ('' = drop block)
+def _decide(paras, t, protected, cheap):
+    """The rule half of the policy for one target, no model involved.
 
-    for t in targets:
-        rec = {"quote": t["quote"][:80],
-               "critics": sorted({e["critic"] for e in t["entries"]})}
-        records.append(rec)
-        n = find_paragraph(paras, t["quote"])
-        rec["paragraph"] = n
-        bodies = [e["body"] for e in t["entries"]]
-        is_cut = any(CUT.match(b) for b in bodies)
+    Returns (record, plan). plan is None when the rules settle the target;
+    otherwise (paragraph number, kind, data) with kind cut, trim or rewrite."""
+    rec = {"quote": t["quote"][:80],
+           "critics": sorted({e["critic"] for e in t["entries"]})}
+    n = find_paragraph(paras, t["quote"])
+    rec["paragraph"] = n
+    bodies = [e["body"] for e in t["entries"]]
+    is_cut = any(CUT.match(b) for b in bodies)
 
-        if t["convergent"] and any(DISSENT.match(b) for b in bodies) \
-                and not all(DISSENT.match(b) for b in bodies):
-            rec["status"] = "skipped-split-panel"
-            continue
-        if not t["convergent"] and not (is_cut and n in cheap):
-            rec["status"] = "skipped-not-convergent"
-            continue
-        if not t["convergent"]:
-            rec["cross_instrument"] = "reverse-outline-cheap"
-        if n is None:
-            rec["status"] = "kept-target-not-found"
-            continue
-        if n in edits:
-            rec["status"] = "kept-paragraph-already-edited"
-            continue
+    if t["convergent"] and any(DISSENT.match(b) for b in bodies) \
+            and not all(DISSENT.match(b) for b in bodies):
+        rec["status"] = "skipped-split-panel"
+        return rec, None
+    if not t["convergent"] and not (is_cut and n in cheap):
+        rec["status"] = "skipped-not-convergent"
+        return rec, None
+    if not t["convergent"]:
+        rec["cross_instrument"] = "reverse-outline-cheap"
+    if n is None:
+        rec["status"] = "kept-target-not-found"
+        return rec, None
+    par_text = paras[n - 1][2]
+    hit = next((p for p in protected
+                if norm(p) and norm(p) in norm(par_text)), None)
+    if hit:
+        rec["status"] = "declined-constitution"
+        rec["cause"] = f"protected span: {hit[:60]}"
+        return rec, None
+    if is_cut:
+        return rec, (n, "cut", None)
+    trims = [b for b in bodies if deletion_only(t["quote"], b)]
+    if trims and len(trims) == len(bodies):
+        return rec, (n, "trim", max(trims, key=lambda b: len(WORD.findall(b))))
+    # A remedy conflict without a CUT is still one shared finding — the
+    # instruction is the why.
+    return rec, (n, "rewrite", next((e["why"] for e in t["entries"] if e["why"]),
+                                    t["entries"][0]["body"]))
 
-        par_text = paras[n - 1][2]
-        hit = next((p for p in protected
-                    if norm(p) and norm(p) in norm(par_text)), None)
-        if hit:
-            rec["status"] = "declined-constitution"
-            rec["cause"] = f"protected span: {hit[:60]}"
-            continue
 
-        if is_cut:
-            new = delete_quote(par_text, t["quote"])
+def _apply_chain(par_text, steps, generate):
+    """Apply every planned target to one paragraph, in document order.
+
+    Each step works on the text the previous step left (GH-430: one edit
+    per paragraph per pass left 22 of 23 convergent targets unapplied on
+    the Loom introduction, and the same ones came back every round). Each
+    step is gated against the state before it, so number, citation, dash
+    and colon invariants hold along the chain by transitivity. Size does
+    not compose that way — two 1.3x rewrites make 1.7x — so a chain with
+    no cut is checked against the original paragraph at the end and rolled
+    back to its longest prefix that still fits the band.
+    Returns the final paragraph text (None when nothing changed)."""
+    cur, changed = par_text, False
+    states = []          # (text after step, rec) for each applied step
+    for t, rec, kind, data in steps:
+        if cur == "":
+            rec["status"] = "kept-paragraph-deleted"
+            continue
+        gone = "kept-quote-gone-after-edit" if changed else "kept-quote-not-in-paragraph"
+        if kind == "cut":
+            new = delete_quote(cur, t["quote"])
             if new is None:
-                rec["status"] = "kept-quote-not-in-paragraph"
+                rec["status"] = gone
                 continue
-            edits[n] = new
             rec["status"] = "applied-deletion"
-            continue
-
-        trims = [b for b in bodies if deletion_only(t["quote"], b)]
-        if trims and len(trims) == len(bodies):
-            body = max(trims, key=lambda b: len(WORD.findall(b)))
-            new = apply_deletion(par_text, t["quote"], body)
+        elif kind == "trim":
+            new = apply_deletion(cur, t["quote"], data)
             if new is None:
-                rec["status"] = "kept-quote-not-in-paragraph"
+                rec["status"] = gone
                 continue
-            clean = strip_rst(par_text)[0]
-            cand = strip_rst(new)[0]
+            clean, cand = strip_rst(cur)[0], strip_rst(new)[0]
             if sorted(NUM.findall(CITE.sub(" ", cand))) != \
                     sorted(NUM.findall(CITE.sub(" ", clean))) or \
                     sorted(CITE.findall(cand)) != sorted(CITE.findall(clean)):
                 rec["status"] = "kept-gate"
                 rec["cause"] = "deletion removed a number or citation"
                 continue
-            edits[n] = new
             rec["status"] = "applied-deletion"
-            continue
+        else:
+            if generate is None:
+                rec["status"] = "kept-no-model"
+                continue
+            clean, markers = strip_rst(cur)
+            if changed and norm(t["quote"]) not in norm(clean):
+                rec["status"] = gone
+                continue
+            try:
+                cand = generate(build_prompt(clean, t["quote"], data))
+            except Exception as e:  # transport errors keep the original
+                rec["status"] = "kept-rewrite-error"
+                rec["cause"] = str(e)[:120]
+                continue
+            cand = (cand or "").strip().strip("`").strip()
+            ok, why_not = gate(clean, cand)
+            if not ok:
+                rec["status"] = "kept-gate"
+                rec["cause"] = why_not
+                continue
+            new = "\n".join(markers + [cand]) if markers else cand
+            rec["status"] = "applied-rewrite"
+        cur, changed = new, True
+        states.append((cur, rec))
 
-        # Rewrite through the transport; a remedy conflict without a CUT
-        # is still one shared finding — the instruction is the why.
-        if generate is None:
-            rec["status"] = "kept-no-model"
-            continue
-        clean, markers = strip_rst(par_text)
-        instruction = next((e["why"] for e in t["entries"] if e["why"]),
-                           t["entries"][0]["body"])
-        try:
-            cand = generate(build_prompt(clean, t["quote"], instruction))
-        except Exception as e:  # transport errors keep the original
-            rec["status"] = "kept-rewrite-error"
-            rec["cause"] = str(e)[:120]
-            continue
-        cand = (cand or "").strip().strip("`").strip()
-        ok, why_not = gate(clean, cand)
-        if not ok:
-            rec["status"] = "kept-gate"
-            rec["cause"] = why_not
-            continue
-        edits[n] = "\n".join(markers + [cand]) if markers else cand
-        rec["status"] = "applied-rewrite"
+    if not changed:
+        return None
+    if cur and not any(r["status"] == "applied-deletion" and k == "cut"
+                       for (_t, r, k, _d) in steps):
+        orig = strip_rst(par_text)[0]
+        while states:
+            ok, why_not = gate(orig, strip_rst(states[-1][0])[0])
+            if ok:
+                break
+            _text, rec = states.pop()
+            rec["status"] = "kept-chain-drift"
+            rec["cause"] = f"chain vs original: {why_not}"
+        if not states:
+            return None
+        cur = states[-1][0]
+    return cur
+
+
+def decide_and_apply(article_text, targets, generate=None,
+                     protected=(), cheap=frozenset(), jobs=4):
+    """The whole policy. Returns (new_text, records).
+
+    Rules settle each target first, with no model call. The surviving
+    targets are grouped by paragraph and each paragraph's chain runs on its
+    own thread (`jobs`; 1 is sequential). Paragraphs are independent, so
+    the output does not depend on `jobs`."""
+    parsed = md_paragraphs.parse(article_text)
+    paras = parsed.paragraphs
+    records, chains = [], {}
+    for t in targets:
+        rec, plan = _decide(paras, t, protected, cheap)
+        records.append(rec)
+        if plan:
+            n, kind, data = plan
+            chains.setdefault(n, []).append((t, rec, kind, data))
+
+    def run(n):
+        return n, _apply_chain(paras[n - 1][2], chains[n], generate)
+
+    edits = {}
+    if jobs and jobs > 1 and len(chains) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            results = list(pool.map(run, sorted(chains)))
+    else:
+        results = [run(n) for n in sorted(chains)]
+    for n, final in results:
+        if final is not None:
+            edits[n] = final
 
     # Splice bottom-up so earlier line ranges stay valid.
     lines = article_text.split("\n")
@@ -330,6 +396,9 @@ def main():
     ap.add_argument("--endpoint", default=None)
     ap.add_argument("--dry-run", action="store_true",
                     help="decide and report; no model calls, no writes")
+    ap.add_argument("--jobs", type=int, default=4,
+                    help="paragraphs rewritten concurrently (default 4; 1 = "
+                         "sequential). Output does not depend on it")
     a = ap.parse_args()
 
     text = open(a.article, encoding="utf-8").read()
@@ -354,7 +423,8 @@ def main():
             return _rw.generate(prompt, **kw)
 
     new_text, records = decide_and_apply(
-        text, targets, generate=generate, protected=protected, cheap=cheap)
+        text, targets, generate=generate, protected=protected, cheap=cheap,
+        jobs=a.jobs)
 
     out = a.out or os.path.splitext(a.article)[0] + ".applied.md"
     if not a.dry_run:

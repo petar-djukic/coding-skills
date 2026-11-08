@@ -173,6 +173,104 @@ def test_counts():
     print("  counts: ok")
 
 
+# --- GH-430: every target in a paragraph applies, paragraphs in parallel ---
+
+CHAIN = """# Title
+
+The gateway forwards each request to the model it names and returns the reply unchanged. It also writes the latency to a log that nobody reads. The billing stays on the provider side.
+
+The shim translates the request into the native format. The operators read its dashboard daily.
+
+The third paragraph has a closing sentence that restates the point. It stands.
+"""
+
+S1 = "The gateway forwards each request to the model it names and returns the reply unchanged."
+S2 = "It also writes the latency to a log that nobody reads."
+S3 = "The billing stays on the provider side."
+
+
+def _rewriter(table):
+    """generate stub: replace the quoted sentence per table, keep the rest."""
+    def gen(prompt):
+        quote = prompt.split('Sentence to change: "', 1)[1].split('"\n', 1)[0]
+        par = prompt.split("Paragraph:\n", 1)[1]
+        return par.replace(quote, table[quote])
+    return gen
+
+
+def test_two_rewrites_in_one_paragraph_both_apply():
+    sh = sheet(conv(S1, [("a", "Shorter.", "x"), ("b", "Shorter.", "y")]) +
+               conv(S3, [("a", "Plainer.", "x"), ("b", "Plainer.", "y")]))
+    gen = _rewriter({S1: "The gateway passes each request to its model.",
+                     S3: "Billing stays with the provider."})
+    new, recs = ca.decide_and_apply(CHAIN, ca.parse_sheet(sh), generate=gen)
+    assert [r["status"] for r in recs] == ["applied-rewrite"] * 2, recs
+    assert "passes each request to its model." in new
+    assert "Billing stays with the provider." in new
+    assert not any(r["status"] == "kept-paragraph-already-edited" for r in recs)
+    print("  two_rewrites_in_one_paragraph_both_apply: ok")
+
+
+def test_deletion_and_rewrite_in_one_paragraph():
+    sh = sheet(conv(S2, [("a", "CUT", "x"), ("b", "CUT", "y")]) +
+               conv(S1, [("a", "Shorter.", "x"), ("b", "Shorter.", "y")]))
+    gen = _rewriter({S1: "The gateway passes each request to its model."})
+    new, recs = ca.decide_and_apply(CHAIN, ca.parse_sheet(sh), generate=gen)
+    assert {r["status"] for r in recs} == {"applied-deletion", "applied-rewrite"}, recs
+    assert S2 not in new and "passes each request to its model." in new
+    print("  deletion_and_rewrite_in_one_paragraph: ok")
+
+
+def test_quote_consumed_by_an_earlier_edit():
+    sh = sheet(conv(S1, [("a", "Merge.", "x"), ("b", "Merge.", "y")]) +
+               conv(S2, [("a", "Plainer.", "x"), ("b", "Plainer.", "y")]))
+    gen = _rewriter({S1: "The gateway forwards each request to its model, returns the reply unchanged, and logs the latency."})
+    # the first rewrite leaves S2 in place; make it absorb S2 instead
+    def absorbing(prompt):
+        out = gen(prompt)
+        return out.replace(" " + S2, "")
+    new, recs = ca.decide_and_apply(CHAIN, ca.parse_sheet(sh), generate=absorbing)
+    assert recs[0]["status"] == "applied-rewrite", recs
+    assert recs[1]["status"] == "kept-quote-gone-after-edit", recs
+    print("  quote_consumed_by_an_earlier_edit: ok")
+
+
+def test_chain_drift_rolls_back_to_a_fitting_prefix():
+    """Each step stays inside 1.35x of its input; together they do not."""
+    long1 = S1[:-1] + " and keeps the original headers intact on the way back."
+    long3 = S3[:-1] + " under the contract the operator signed with them last year."
+    sh = sheet(conv(S1, [("a", "Expand.", "x"), ("b", "Expand.", "y")]) +
+               conv(S3, [("a", "Expand.", "x"), ("b", "Expand.", "y")]))
+    gen = _rewriter({S1: long1, S3: long3})
+    orig = ca.strip_rst(ca.md_paragraphs.parse(CHAIN).paragraphs[0][2])[0]
+    step1 = orig.replace(S1, long1)
+    assert ca.gate(orig, step1)[0], "fixture: step 1 alone must fit"
+    assert not ca.gate(orig, step1.replace(S3, long3))[0], "fixture: chain must not"
+    new, recs = ca.decide_and_apply(CHAIN, ca.parse_sheet(sh), generate=gen)
+    assert recs[0]["status"] == "applied-rewrite", recs
+    assert recs[1]["status"] == "kept-chain-drift", recs
+    assert long1 in new and long3 not in new
+    print("  chain_drift_rolls_back_to_a_fitting_prefix: ok")
+
+
+def test_jobs_do_not_change_the_output():
+    s4 = "The shim translates the request into the native format."
+    s5 = "The third paragraph has a closing sentence that restates the point."
+    sh = sheet(conv(S1, [("a", "Shorter.", "x"), ("b", "Shorter.", "y")]) +
+               conv(s4, [("a", "Plainer.", "x"), ("b", "Plainer.", "y")]) +
+               conv(s5, [("a", "CUT", "x"), ("b", "CUT", "y")]) +
+               conv(S3, [("a", "Plainer.", "x"), ("b", "Plainer.", "y")]))
+    gen = _rewriter({S1: "The gateway passes each request to its model.",
+                     s4: "The shim rewrites the request natively.",
+                     S3: "Billing stays with the provider."})
+    a_new, a_recs = ca.decide_and_apply(CHAIN, ca.parse_sheet(sh), generate=gen, jobs=1)
+    b_new, b_recs = ca.decide_and_apply(CHAIN, ca.parse_sheet(sh), generate=gen, jobs=4)
+    assert a_new == b_new
+    assert [r["status"] for r in a_recs] == [r["status"] for r in b_recs]
+    assert ca.counts(a_recs)["applied"] == 4, a_recs
+    print("  jobs_do_not_change_the_output: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -182,4 +280,9 @@ if __name__ == "__main__":
     test_deletion_only_replacement()
     test_cross_instrument_deletion()
     test_counts()
+    test_two_rewrites_in_one_paragraph_both_apply()
+    test_deletion_and_rewrite_in_one_paragraph()
+    test_quote_consumed_by_an_earlier_edit()
+    test_chain_drift_rolls_back_to_a_fitting_prefix()
+    test_jobs_do_not_change_the_output()
     print("all critic-apply tests passed")
