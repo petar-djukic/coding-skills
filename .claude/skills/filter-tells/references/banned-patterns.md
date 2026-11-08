@@ -291,6 +291,25 @@ and reflexive use.
 | Imperative-run closer | closing drumbeat of commands | "Find the cracks. Build in your own time. Document everything. Set your exit timeline." |
 | Metaphor mirror pair | adjacent sentences mapping a pair onto a metaphor pair | "The specification is the source. The generated code is the binary." |
 
+## Distributive Universal Pairs (structural; detect-structural)
+
+A model reaches for "every" where a person writes the general claim and lets
+the scope stand. The paired form is the clearest instance; density is the
+rest of it (GH-410).
+
+| Shape | Example | Fix |
+|---|---|---|
+| every X and every Y | "It answers three questions for every agent and every task." | "for each agent's tasks", or drop the quantifier: "It answers three questions about an agent's tasks." |
+| every X ... every Y, one sentence | "Every harness version is stored with its lineage, and every scorecard names the harness version." | keep one quantifier: "Each harness version is stored with its lineage, and its scorecard names it." |
+| each X and each Y | "The scheduler wakes each node and each link." | "wakes the nodes and links in turn" |
+| "every" at many times the author's rate | list items each opening "every ..." | drop "every" where the sentence is already general; reduce toward the target, not to zero |
+
+`paired-universal` fires at zero tolerance; `universal-heavy` measures
+"every" per 500 words against 2.5, or the idiolect `universal-quantifier`
+ceiling where a repository's bank carries one (count `\bevery\b` in that
+marker so the bank and the scan measure the same thing). "each" alone is
+not counted: technical prose uses it natively ("each node", "each slot").
+
 ## Compressed Conversation / Empty Phrases (Prompt 8b — not regexable)
 
 A defect distinct from AI cadence: language that compresses a discussion the

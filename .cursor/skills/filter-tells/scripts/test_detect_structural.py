@@ -445,7 +445,66 @@ def test_consequence_echo_advisory_in_analyze():
     print("  consequence_echo_advisory_in_analyze: ok")
 
 
+def _pairs(text):
+    return ds.detect_paired_universals(ds.split_sentences_all(text))
+
+
+def test_paired_universal_every_x_and_every_y():
+    """GH-410: the sentence the author removed by hand after a full run."""
+    hits = _pairs("It answers three questions for every agent and every task.")
+    assert len(hits) == 1 and hits[0]["type"] == "paired-universal", hits
+    assert "every agent" in hits[0]["detail"]
+    print("  paired_universal_every_x_and_every_y: ok")
+
+
+def test_paired_universal_every_apart_in_one_sentence():
+    hits = _pairs("Every harness version is stored with its lineage, and "
+                  "every scorecard names the harness version.")
+    assert len(hits) == 1, hits
+    print("  paired_universal_every_apart_in_one_sentence: ok")
+
+
+def test_paired_universal_each_coordinated():
+    assert len(_pairs("The scheduler wakes each node and each link in turn.")) == 1
+    print("  paired_universal_each_coordinated: ok")
+
+
+def test_paired_universal_negatives():
+    """Single quantifiers, sentences apart, technical "each", reciprocals."""
+    for text in (
+        "Every scorecard names its harness. The harness records its version.",
+        "Each node sends one packet in each slot it owns.",
+        "The two services call each other and each other's caches.",
+        "We measured every run once.",
+    ):
+        assert _pairs(text) == [], text
+    print("  paired_universal_negatives: ok")
+
+
+def test_paired_universal_wired_into_paragraph_and_analyze():
+    para = ("We store the lineage for every harness version. The record "
+            "answers three questions for every agent and every task. "
+            "Reviewers read the record before a model is promoted to the "
+            "registry. The registry keeps one entry per promoted model.")
+    r = ds.filter_tells_paragraph(para, para_index=3)
+    hits = [i for i in r["issues"] if i["type"] == "paired-universal"]
+    assert len(hits) == 1 and hits[0]["paragraph"] == 4, r["issues"]
+    assert r["metrics"]["paired_universal_count"] == 1
+    doc = para + " " + ("The pipeline writes one row per run and reads "
+                        "the rows back when the report is built. ") * 4
+    a = ds.analyze(doc)
+    assert a["metrics"]["paired_universal_count"] == 1
+    assert "paired-universal" in [i["type"] for i in a["issues"]]
+    assert "universal_density_per_500w" in a["metrics"]
+    print("  paired_universal_wired_into_paragraph_and_analyze: ok")
+
+
 def main():
+    test_paired_universal_every_x_and_every_y()
+    test_paired_universal_every_apart_in_one_sentence()
+    test_paired_universal_each_coordinated()
+    test_paired_universal_negatives()
+    test_paired_universal_wired_into_paragraph_and_analyze()
     test_filter_tells_paragraph_returns_shape()
     test_detect_paragraph_alias()
     test_parallelism_detected()

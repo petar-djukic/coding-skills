@@ -427,6 +427,9 @@ one that is not already there
 12. The rewrite must not be longer than the original passage — cutting is \
 allowed, adding is not
 13. Preserve every bold, italic, and backtick code span in place
+14. A flagged paired-universal ("every X and every Y") keeps one quantifier \
+or none: "for each agent's tasks", or drop "every" where the sentence is \
+already general
 
 OUTPUT: The rewritten passage only. No commentary."""
 
