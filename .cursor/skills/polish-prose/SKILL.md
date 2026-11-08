@@ -90,22 +90,30 @@ Every skip is named in the report, never silent.
 
 ## The stages
 
-| phase | stage | owning skill | writes |
+| phase | stage | owning skill | commits |
 |---|---|---|---|
 | Preflight | branch check, skill paths, focus file, form, roster, the draft's rules, protected spans, baseline commit | — | baseline commit only |
-| Humanize | the chain, once, one commit per stage | humanize | yes |
-| Review, each round | annotate or audit, rank | reverse-outline | markers only |
-| | length pre-check | the focus file's command | no |
-| | the roster in parallel, fresh contexts, focus brief answered by name | critic-panel Mode A | reports |
-| | merge | critic-panel `converge.py` | sheet |
-| | rule-based application | critic-apply | candidate |
-| | fresh-context entailment, reverts only | cold-review | yes |
-| | CoT warrant tails removed by deletion only, two fresh legs carrying the focus brief, the draft's rules, and the panel's keep answers; keep-listed cuts reported, not applied (GH-416) | critic-panel `iceberg` roster + critic-apply | candidate |
-| | fresh-context entailment on the Iceberg candidate, reverts only | cold-review | yes |
-| | cross-family comprehension read | critic-panel Mode C | rounds 1–2 only |
-| | voice audit | voice-critic | no |
-| Final read | read-only panel on the shipping text, when the round cap stopped the loop | critic-panel Mode A | no |
+| Humanize | the chain, once, one commit per stage | humanize | one per stage |
+| Review, each round | annotate or audit, rank | reverse-outline | `reverse-outline` (markers, or empty with the audit) |
+| | length pre-check | the focus file's command | — (in the reverse-outline commit's body) |
+| | the roster in parallel, fresh contexts, focus brief answered by name | critic-panel Mode A | — (critics write sidecar reports) |
+| | merge | critic-panel `converge.py` | `panel`, empty, with the convergent passages and focus answers |
+| | rule-based application | critic-apply | `critic-apply … candidate`, the attempt itself |
+| | fresh-context entailment, reverts only | cold-review | `cold-review … critic-apply: <verdict>`: empty, reverts, or the baseline restored |
+| | CoT warrant tails removed by deletion only, two fresh legs carrying the focus brief, the draft's rules, and the panel's keep answers; keep-listed cuts reported, not applied (GH-416) | critic-panel `iceberg` roster + critic-apply | `iceberg … candidate` |
+| | fresh-context entailment on the Iceberg candidate, reverts only | cold-review | `cold-review … iceberg: <verdict>` |
+| | cross-family comprehension read | critic-panel Mode C | `ross` (fixes in rounds 1–2, empty with the findings after) |
+| | voice audit | voice-critic | `voice-critic`, empty, with the verdicts |
+| Final read | read-only panel on the shipping text, when the round cap stopped the loop | critic-panel Mode A | `panel … final read`, empty |
 | Record | generation-note entry when there is front matter, sidecar sweep | — | yes |
+
+Every stage that runs ends in a commit (GH-434). A stage that leaves the
+text alone commits empty, with what it found in the body, so `git log` on
+the branch reads as the run's record. An attempted change is committed
+before cold review judges it, and the verdict is a commit of its own, so a
+rejected attempt stays readable with `git show`. The round's "did the prose
+change" test measures the net diff from the round's first commit, so an
+attempt that cold review undid does not count as change.
 
 The persona critics run on the session model; the ross read adds two
 Ollama models from different families, and only its cross-family
@@ -141,7 +149,7 @@ so.
 ## Contracts it inherits
 
 - **Worktree branches only.** Preflight refuses on `main`; every stage
-  commits.
+  commits, empty when it changed nothing.
 - **No hand-written prose.** Agents analyse and choose; text changes
   only through the rewrite transport, mechanical deletions, and
   verbatim reverts.

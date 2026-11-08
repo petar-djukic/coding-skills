@@ -23,6 +23,10 @@ const DEFAULT_ROSTER = ['Levine', 'Didion', 'Hemingway']
 const REQUIRED_SKILLS = ['humanize', 'reverse-outline', 'critic-panel', 'critic-apply', 'cold-review', 'voice-critic']
 
 const NO_PROSE = 'You never write article prose yourself. Text changes only through the owning skill: rewrites go through the rewrite transport, deletions and verbatim reverts apply mechanically.'
+// Every stage ends in a commit on the worktree branch (GH-434), so the
+// history shows what each step did, not only what landed. A stage that
+// leaves the article unchanged commits empty, with its result in the body.
+const COMMIT = (subject) => `Then commit, whatever happened. If ${ART} changed, git add only ${ART} and commit it as "${subject}". If it did not change, run git commit --allow-empty with the subject "${subject}, no change". Either way the commit body (at most 20 lines) records what this stage found or decided: counts, verdicts, and one line per item it reports. Never commit sidecars.`
 const HYGIENE = `Before you return, delete every sidecar this stage created or consumed (reading copies, critic reports, sheets, *.applied.md, JSON reports), and only files whose names start with ${STEM}. The article file is the only file you may leave changed.`
 
 const PREFLIGHT = {
@@ -99,8 +103,9 @@ const APPLY = {
     kept: { type: 'integer' },
     declined: { type: 'integer' },
     unapplied_convergent: { type: 'array', items: { type: 'string' } },
+    committed_sha: { type: 'string' },
   },
-  required: ['candidate_path', 'applied', 'kept', 'declined', 'unapplied_convergent'],
+  required: ['candidate_path', 'applied', 'kept', 'declined', 'unapplied_convergent', 'committed_sha'],
 }
 
 const COLD = {
@@ -228,7 +233,8 @@ Write your report to ${STEM}.critic-${name.toLowerCase()}.md and return only the
 
 Run ${SK}/critic-panel/scripts/converge.py on them with --out ${STEM}.critic-sheet.md --roster ${CRITICS.map((n) => n.toLowerCase()).join(',')}. If a report is refused as unparseable, fix only its headings and field labels to the literal format in ${SK}/critic-panel/SKILL.md (never its content) and re-run.
 
-From the sheet and the reports return: every convergent passage (2+ critics) with its first words, the shared reason, and the critic count; the paragraph moves; the declared defect classes; the consensus answer to each focus-list item from the Diagnoses (one line each); and the single-critic suggestion count. Keep the critic reports and sheet on disk (the next stage reads the sheet) and return its path.`,
+From the sheet and the reports return: every convergent passage (2+ critics) with its first words, the shared reason, and the critic count; the paragraph moves; the declared defect classes; the consensus answer to each focus-list item from the Diagnoses (one line each); and the single-critic suggestion count. Keep the critic reports and sheet on disk (the next stage reads the sheet) and return its path.
+${COMMIT(tag === 'final' ? 'panel: <slug> (final read)' : `panel: <slug> (round ${round})`)} The body carries the convergent count, one line per convergent passage (first words and reason), and one line per focus-list answer.`,
     { label: `${tag} r${round}: converge`, phase: tag === 'final' ? 'Final read' : 'Review', schema: SHEET, effort: 'low' })
 }
 
@@ -236,17 +242,17 @@ From the sheet and the reports return: every convergent passage (2+ critics) wit
 // critic-apply's output and the Iceberg pass's both go through it, so a
 // deletion that leaves a fragment or drops a statement id is reverted
 // instead of committed (GH-416).
-function coldReview(candidatePath, baselineSha, round, commitSubject, label) {
+function coldReview(candidateSha, round, stage, label) {
   return agent(`Cold review, fresh context. You have not seen how the candidate was produced and must not ask.
 
-Read ${SK}/cold-review/SKILL.md and its prompt template ${SK}/cold-review/references/review-prompt.md. Baseline: ${ART} as committed at ${baselineSha} (extract it with git show to a temporary file). Candidate: ${candidatePath}. Run the skill's screen, review paragraph by paragraph as the template specifies, and decide with its closed vocabulary.
+Read ${SK}/cold-review/SKILL.md and its prompt template ${SK}/cold-review/references/review-prompt.md. Baseline: ${ART} as committed at ${candidateSha}^ (the commit before the candidate; extract it with git show to a temporary file). Candidate: ${ART} as committed at ${candidateSha}, which is the working file now. Run the skill's screen, review paragraph by paragraph as the template specifies, and decide with its closed vocabulary.
 
-- ship as-is: replace ${ART} with the candidate.
-- ship with reverts: run the skill's apply with your revert list and write the result over ${ART}.
-- reject candidate: leave ${ART} untouched.
+- ship as-is: leave ${ART} as it is.
+- ship with reverts: run the skill's apply with your revert list against the baseline and write the result over ${ART}.
+- reject candidate: restore ${ART} to the baseline exactly (git show ${candidateSha}^:${ART}).
 High-value targets: numbers, citations, quotations, statement ids (R1.2, AC3), sentences left as fragments, and these protected spans:
 ${list(pre.protected_spans)}
-If ${ART} changed, commit it as "${commitSubject}". Return the verdict, each revert as one line, and HEAD. ${HYGIENE}`,
+${COMMIT(`cold-review: <slug> (round ${round}, ${stage}: <verdict>)`)} For reverts, one body line per reverted paragraph and why; for a rejection, the reasons. The candidate stays in history at ${candidateSha}, so git show reads what was tried. Return the verdict, each revert as one line, and HEAD after your commit. ${HYGIENE}`,
     { label, phase: 'Review', schema: COLD })
 }
 
@@ -271,7 +277,7 @@ for (let round = 1; round <= MAX; round++) {
   phase('Review')
   const outline = await agent(`Round ${round} start for ${ART}.
 
-1. reverse-outline: read ${SK}/reverse-outline/SKILL.md. If the article carries no rst: markers, run annotate (session-model labelling, as the skill specifies) and validate; otherwise run audit against the existing markers and check --renumber. Then run rank. Commit marker changes as "reverse-outline: <slug>".
+1. reverse-outline: read ${SK}/reverse-outline/SKILL.md. If the article carries no rst: markers, run annotate (session-model labelling, as the skill specifies) and validate; otherwise run audit against the existing markers and check --renumber. Then run rank. ${COMMIT(`reverse-outline: <slug> (round ${round})`)} The body carries the audit result and rank's cheap and split paragraphs.
 2. Return round_start_sha = HEAD after that commit, the paragraph numbers rank lists as cheap deletion candidates, the split paragraphs, and any paragraph audit marks eroded or changed.
 3. Build the critics' reading copy with ${SK}/critic-panel/scripts/prepare_copy.py and return its path (leave it on disk for the critics).
 4. ${pre.precheck_command ? `Run the length pre-check: ${pre.precheck_command.replace('{article}', ART)}. Return the prose word total and each flagged paragraph as one line (line number, word count, first words, over or DEFECT).` : 'No pre-check command was supplied; return total_words as the prose word count and an empty flagged list.'}
@@ -288,16 +294,16 @@ ${NO_PROSE}`,
 Pass as protected spans (write them to a temporary spans file):
 ${list(pre.protected_spans)}
 Pass --cheap-paragraphs ${outline.cheap_paragraphs.join(',') || '(none)'} from reverse-outline's rank.
-Do NOT overwrite the article: leave the candidate at the skill's output path and return that path, the applied/kept/declined counts, and every convergent target that was not applied (first words plus the reason).
-Then delete the three critic reports and the sheet (the counts you return are the record). ${NO_PROSE}`,
+Write the skill's candidate over ${ART}: cold review judges it next, as a commit, so a rejected attempt stays in history. ${COMMIT(`critic-apply: <slug> (round ${round}, candidate)`)} The body carries the applied/kept/declined counts and one line per target not applied, with its status.
+Return the article path as candidate_path, the counts, every convergent target that was not applied (first words plus the reason), and HEAD after your commit as committed_sha.
+Then delete the three critic reports and the sheet. ${NO_PROSE}`,
     { label: `r${round}: critic-apply`, phase: 'Review', schema: APPLY })
   if (!applied) return { status: 'failed', stage: `round ${round} critic-apply`, rounds }
 
-  let cold = { verdict: 'ship as-is', reverts: [], committed_sha: outline.round_start_sha }
+  let cold = { verdict: 'ship as-is', reverts: [], committed_sha: applied.committed_sha }
   if (applied.applied > 0) {
-    cold = await coldReview(applied.candidate_path, outline.round_start_sha, round,
-      `critic-apply: <slug> (round ${round}, cold-reviewed)`, `r${round}: cold review`)
-    if (!cold) return { status: 'failed', stage: `round ${round} cold review`, rounds }
+    cold = await coldReview(applied.committed_sha, round, 'critic-apply', `r${round}: cold review`)
+    if (!cold) return { status: 'failed', stage: `round ${round} cold review`, rounds, unreviewed_candidate: applied.committed_sha, note: `HEAD carries an unreviewed critic-apply candidate; reset ${ART} to ${applied.committed_sha}^ before using the branch` }
   }
 
   phase('Review')
@@ -314,12 +320,13 @@ ${icebergKeep ? `Before applying, check every convergent cut against the keep li
 ${icebergKeep}
 ` : ''}Then run the critic-apply skill (${SK}/critic-apply/SKILL.md) on the sheet with these protected spans:
 ${list(pre.protected_spans)}
-Convergent cuts and deletion-only trims apply directly with no model call; report any target that could not be placed (for example a span inside a list item, which critic-apply does not locate) instead of placing it by hand. Do NOT overwrite the article: leave the candidate at the skill's output path and return that path, the applied/kept/declined counts, and every convergent target left unapplied (first words plus the reason). ${HYGIENE}`,
+Convergent cuts and deletion-only trims apply directly with no model call; report any target that could not be placed (for example a span inside a list item, which critic-apply does not locate) instead of placing it by hand. Write the skill's candidate over ${ART}: cold review judges it next, as a commit. ${COMMIT(`iceberg: <slug> (round ${round}, candidate)`)} The body carries each leg's suggestion count, the applied/kept/declined counts, and one line per cut not applied, with its reason.
+Return the article path as candidate_path, the counts, every convergent target left unapplied (first words plus the reason), and HEAD after your commit as committed_sha. ${HYGIENE}`,
     { label: `r${round}: iceberg apply`, phase: 'Review', schema: APPLY, effort: 'low' })
   let icebergCold = null
   if (iceberg && iceberg.applied > 0) {
-    icebergCold = await coldReview(iceberg.candidate_path, cold.committed_sha, round,
-      `iceberg: <slug> (round ${round}, cold-reviewed)`, `r${round}: iceberg cold review`)
+    icebergCold = await coldReview(iceberg.committed_sha, round, 'iceberg', `r${round}: iceberg cold review`)
+    if (!icebergCold) return { status: 'failed', stage: `round ${round} iceberg cold review`, rounds, unreviewed_candidate: iceberg.committed_sha, note: `HEAD carries an unreviewed iceberg candidate; reset ${ART} to ${iceberg.committed_sha}^ before using the branch` }
   }
   log(`round ${round}: iceberg legs ${icebergLegs.filter(Boolean).length}/2, ${iceberg ? iceberg.applied : 0} warrant tails cut in the candidate, cold review ${icebergCold ? icebergCold.verdict : 'not run'}`)
 
@@ -329,8 +336,9 @@ Convergent cuts and deletion-only trims apply directly with no model call; repor
 Run its session leg yourself from the --copy-only reading copy (forward-only, one sentence of lookback, every inference you had to make counts as a finding), then two cross-family Ollama legs with ${SK}/critic-panel/scripts/ross_read.py --model <name>, choosing two model families different from each other and from yours. Merge with converge.py.
 
 ${fixRoss
-    ? `${round === 1 ? 'Fix findings convergent ACROSS families on non-reserved prose.' : 'Fix only regressions the previous round introduced that are convergent across families; nothing else.'} Apply them with the critic-apply skill (${SK}/critic-apply/SKILL.md) using the merged ross sheet, with the protected spans below. Before writing it over ${ART}, run ${SK}/cold-review/scripts/cold_review.py screen with the current article as baseline and the fixed text as candidate, and revert (with its apply) every paragraph where a number, citation or quotation drifted. Then write the result over ${ART} and commit it as "ross: <slug> (round ${round})".`
+    ? `${round === 1 ? 'Fix findings convergent ACROSS families on non-reserved prose.' : 'Fix only regressions the previous round introduced that are convergent across families; nothing else.'} Apply them with the critic-apply skill (${SK}/critic-apply/SKILL.md) using the merged ross sheet, with the protected spans below. Before writing it over ${ART}, run ${SK}/cold-review/scripts/cold_review.py screen with the current article as baseline and the fixed text as candidate, and revert (with its apply) every paragraph where a number, citation or quotation drifted. Then write the result over ${ART}.`
     : 'Read only this round: the batch cap (fix convergents in round 1, repair regressions in round 2, then stop) is reached. Change nothing.'}
+${COMMIT(`ross: <slug> (round ${round}${fixRoss ? '' : ', read only'})`)} The body carries the legs and one line per cross-family convergent finding, fixed or not.
 Reserved, never fixed (report them): single-model findings, locked spans, rule tensions, the protected spans below, and any sentence the article's generation notes record as the author's own hand edit.
 Protected spans:
 ${list(pre.protected_spans)}
@@ -338,7 +346,7 @@ Return the legs you ran (model names), every cross-family convergent finding as 
     { label: `r${round}: ross read`, phase: 'Review', schema: ROSS })
 
   const voice = VOICE_READY
-    ? await agent(`voice-critic on ${ART}: read ${SK}/voice-critic/SKILL.md and run its script read-only with --judge --form ${pre.voice_form} --model ${pre.voice_model} --json, exactly these values: preflight resolved them, and a different form or model is not yours to choose. If the run fails, return the failure as one flag; do not retry with other arguments. Return the dimensions that FAIL and each flagged span as one line (dimension, quoted span, line range). Never edit anything. ${HYGIENE}`,
+    ? await agent(`voice-critic on ${ART}: read ${SK}/voice-critic/SKILL.md and run its script read-only with --judge --form ${pre.voice_form} --model ${pre.voice_model} --json, exactly these values: preflight resolved them, and a different form or model is not yours to choose. If the run fails, return the failure as one flag; do not retry with other arguments. Return the dimensions that FAIL and each flagged span as one line (dimension, quoted span, line range). Never edit anything. ${COMMIT(`voice-critic: <slug> (round ${round})`)} The body carries each dimension's verdict and the flagged spans. ${HYGIENE}`,
       { label: `r${round}: voice-critic`, phase: 'Review', schema: VOICE, effort: 'low' })
     : { failed: [], flags: [`skipped: ${pre.has_voice_constitution ? (pre.voice_skip || 'preflight returned no form or judge') : 'no voice constitution found'}`] }
 
