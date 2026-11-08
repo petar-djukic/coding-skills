@@ -434,6 +434,7 @@ stay verbatim in the draft, and are counted in the manifest.
 |---|---|---|
 | Endpoint | `--endpoint` / `OLLAMA_ENDPOINT` | `http://localhost:11434` |
 | `OLLAMA_WAIT_SERVER` | seconds to wait for a mid-run Ollama restart (default 0) | set 600 for unattended batches — a supervised local server can be reaped mid-run and the retry backoff alone cannot ride out its restart (GH-173) |
+| `OLLAMA_THINK` | Ollama `think` field for every driver: `false` / `true`, unset sends none (default unset) | set `false` for a local reasoning model whose reasoning lands in the answer — `ornith-1.5:35b` opened every rewrite with "The user wants me to..." until it was (GH-409). A stage that passes `think=` itself keeps its own value; `--check` reports the setting |
 | Model | `--model` / `MATCH_VOICE_MODEL` | `cohere:command-a-03-2025` (local fallback `gemma4:12b`) |
 | Temperature | `--temperature` | 0.7 |
 | Timeout (s) | `--timeout` / `MATCH_VOICE_TIMEOUT` | 300 (cold loads are slow) |

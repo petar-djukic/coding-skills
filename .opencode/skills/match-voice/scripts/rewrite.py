@@ -138,6 +138,30 @@ COHERE_MIN_THINKING_BUDGET = int(os.environ.get("COHERE_MIN_THINKING_BUDGET", "8
 # Unset sends no field, which is what every measured-clean run above did.
 COHERE_THINKING = os.environ.get("COHERE_THINKING", "").strip().lower()
 COHERE_THINKING_BUDGET = os.environ.get("COHERE_THINKING_BUDGET", "").strip()
+
+# Ollama's counterpart (GH-409). A reasoning model whose template does not
+# route its reasoning into the separate `thinking` field returns it inside
+# `response`, so every stage received the scratchpad as the rewrite:
+# ornith-1.5:35b opened each answer with "The user wants me to rewrite...",
+# and `"think": false` gave the clean one-line rewrite in 10 tokens against
+# 158. Unset keeps today's request (no field); an explicit `think=` from the
+# caller (burstiness passes False) still wins.
+OLLAMA_THINK_VALUES = {"false": False, "off": False, "0": False, "no": False,
+                       "true": True, "on": True, "1": True, "yes": True}
+
+
+def ollama_think():
+    """OLLAMA_THINK as True, False, or None (unset). Read per call, so a
+    driver that sets it after import is honoured. An unrecognised value is
+    refused rather than guessed: a typo that silently left thinking on is the
+    failure this setting exists to stop."""
+    raw = os.environ.get("OLLAMA_THINK", "").strip().lower()
+    if not raw:
+        return None
+    if raw not in OLLAMA_THINK_VALUES:
+        raise RuntimeError(
+            f"OLLAMA_THINK must be true or false (or unset), got {raw!r}.")
+    return OLLAMA_THINK_VALUES[raw]
 # Doc audit (GH-176, docs.cohere.com 2026-08-31): temperature defaults to 0.3,
 # p to 0.75, k to 0; safety_mode defaults to CONTEXTUAL; `seed` gives
 # deterministic sampling. The documented reasoning guidance is "leave at least
@@ -470,7 +494,13 @@ def check_server(endpoint, model):
         return False, (f"model '{model}' not available on {endpoint}. "
                        f"Pull it with `ollama pull {model}`, or pick one of: "
                        f"{', '.join(names[:8])}")
-    return True, f"{endpoint} ready, model {model}"
+    try:
+        think = ollama_think()
+    except RuntimeError as e:
+        return False, str(e)
+    setting = {None: "unset (model default)", False: "false",
+               True: "true"}[think]
+    return True, f"{endpoint} ready, model {model}, OLLAMA_THINK {setting}"
 
 
 def _check_cohere(model):
@@ -504,8 +534,9 @@ def generate(prompt, endpoint=DEFAULT_ENDPOINT, model=DEFAULT_MODEL,
 
     ``system`` sends a system prompt alongside the user prompt. ``think``
     toggles Ollama's reasoning field: pass False for a thinking model whose
-    chain-of-thought would otherwise land in the response. Both are omitted
-    from the body when None, so a server that predates either field sees the
+    chain-of-thought would otherwise land in the response. When ``think`` is
+    None, ``OLLAMA_THINK`` decides (see ollama_think). Both are omitted from
+    the body when unset, so a server that predates either field sees the
     request it saw before.
 
     Why the HTTP API and not `ollama run` (GH-129): gemma4:31b-cloud is a
@@ -535,6 +566,8 @@ def generate(prompt, endpoint=DEFAULT_ENDPOINT, model=DEFAULT_MODEL,
     }
     if system is not None:
         payload["system"] = system
+    if think is None:
+        think = ollama_think()
     if think is not None:
         payload["think"] = bool(think)
     body = json.dumps(payload).encode()

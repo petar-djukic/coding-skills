@@ -17,6 +17,14 @@ reference — set `--model gemma4:12b` (or `MATCH_VOICE_MODEL`) on a keyless
 machine or when the draft must stay local. Full Cohere reasoning:
 [cohere-bakeoff.md](./cohere-bakeoff.md).
 
+**Local reasoning models need `OLLAMA_THINK=false` (GH-409).** A reasoning
+model whose Ollama template leaves its reasoning in `response` rather than the
+separate `thinking` field hands every stage its scratchpad as the rewrite.
+`ornith-1.5:35b` did this from filter-tells, match-voice, and tighten-style
+alike; with `think` false it returned the clean rewrite in 10 tokens against
+158. The setting reaches every driver through `generate()`; Cohere has its own,
+`COHERE_THINKING`, and ignores this one.
+
 **Model choice (GH-163 bake-off, 10 models on one paragraph with identical
 anchors, judged on voice fidelity plus the full gate):**
 
