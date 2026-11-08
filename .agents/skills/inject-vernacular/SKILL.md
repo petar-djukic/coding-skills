@@ -42,8 +42,8 @@ no edits.
 
 | marker | operator here |
 |---|---|
-| colon-verdict | RESTORE: join "X. That is, / This means / In other words, y" into "X: y". REDUCE from the document's end (no provenance for "latest-added"). |
-| em-dash | RESTORE: parenthetical asides become em-dash pairs. REDUCE: dash pairs back to parentheses. |
+| colon-verdict | RESTORE: join "X. That is, / This means / In other words, y" into "X: y". REDUCE from the document's end (no provenance for "latest-added"), only where the right side opens on a subject and carries a finite verb — an imperative or verbless right side stays joined. |
+| em-dash | RESTORE: parenthetical asides become dash pairs in the document's own form (ASCII `--` when the file uses it, else the em-dash), except an aside followed by punctuation or a citation, or one sharing its sentence with another parenthetical (an item of a parallel series). REDUCE: dash pairs back to parentheses. |
 | antithesis-not | RESTORE: "X rather than Y" / "X instead of Y" → "X, not Y". REDUCE reverses it. |
 | kind-of | Delete excess over the trace target, reverse document order; **never injected**. |
 | okay, you-know | STRIP outside quoted speech; quoted speech survives. |
@@ -52,7 +52,7 @@ no edits.
 | ai-connectives | Sentence-initial "However," → "But"; "Moreover,/Furthermore,/Additionally," → "And". |
 | i-think | REDUCE receipts-first (paragraphs carrying a number or citation lose their hedge first). RESTORE below target only at voice-critic unhedged-prediction flags (`--critic-flags report.json`): the flagged sentence gets an "I think" prefix, never past target, never on a sentence carrying a number or citation, and only when the first word is safely lowercasable (a determiner or pronoun — a possible proper noun skips the flag rather than risking "I think claude"). Which claims are unhedged predictions is the critic's judgment; the application stays deterministic over its spans. |
 | maybe | "perhaps" → "maybe" always; excess capped. |
-| sentence-length | SPLIT any sentence over 30 words at the semicolon or the top-level ", and/, but". MERGE is manual and never performed. |
+| sentence-length | SPLIT any sentence over 30 words at a semicolon whose tail opens like a clause, or at a ", and/, but" with a finite verb on both sides. Never at the final conjunction of a series (the item before it short and after a comma, or a run a colon introduced), never inside brackets. MERGE is manual and never performed. |
 | probably, be-able-to | RETAIN: structurally no-ops — never injected, never deleted. Listed in the report as intentionally untouched. |
 | he-agent, article-density | Gate-read territory. The bank itself marks the referent/POS judgment not machine-checkable; this script never attempts them. |
 
@@ -95,6 +95,15 @@ Each application is one edit-log entry (`calque:<key>`, with the tier and
 site in its note), guarded by quoted speech and span locks like every
 other operator, judged by the verifier when `--verify` is on, and
 otherwise left to the author's gate read per `substrate.policy`.
+
+Citation spans are byte-identical through every operator: an edit that
+changes a pandoc group (`[@a; @b]`) or a numbered marker (`[3]`) is
+refused before the verifier sees it and counted under `edits_refused` in
+the report (GH-407). The clause guards above use no part-of-speech
+tagger; they decline what they cannot vouch for, so a budget can go
+unmet, and the report's rates show it. Sentence-initial "So" removal is
+a rate decision and still fires on causal "So" — review those edits in
+the log.
 
 Deviations from the bank's letter, where the bank asks for judgment a
 mechanical stage cannot supply, are deliberate and visible in the report:
