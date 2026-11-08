@@ -361,7 +361,71 @@ def test_all_five_reported_and_cli():
     print("  all_five_reported_and_cli: ok")
 
 
+def test_form_aliases_resolve():
+    """GH-415: polish-prose's preflight names forms in its own words."""
+    assert vc.resolve_form("essay") == "essay"
+    assert vc.resolve_form("  How-To ") == "how-to"
+    assert vc.resolve_form("post") == "essay"
+    assert vc.resolve_form("blog  post") == "essay"
+    assert vc.resolve_form("tutorial") == "how-to"
+    assert vc.resolve_form("op-ed") == "polemic"
+    for unmapped in ("paper section", "README", "chapter", "", None):
+        assert vc.resolve_form(unmapped) is None, unmapped
+    print("  form_aliases_resolve: ok")
+
+
+def test_preflight_names_the_skip_once():
+    calls = []
+
+    def check(endpoint, model):
+        calls.append(model)
+        return {"cohere:x": (False, "no Cohere API key"),
+                vc.FALLBACK_MODEL: (True, "ready")}.get(model, (False, "?"))
+
+    r = vc.preflight("paper section", "cohere:x", "http://e", check=check)
+    assert r["form"] is None and r["model"] is None, r
+    assert "paper section" in r["skip"] and "no voice-critic profile" in r["skip"]
+    assert calls == [], "an unmappable form must not spend a judge check"
+
+    r = vc.preflight("post", "cohere:x", "http://e", check=check)
+    assert r["form"] == "essay" and r["model"] == vc.FALLBACK_MODEL, r
+    assert r["skip"] is None
+    assert [c["model"] for c in r["checks"]] == ["cohere:x", vc.FALLBACK_MODEL]
+    assert r["checks"][0]["ready"] is False, "the fallback must be visible"
+
+    r = vc.preflight("essay", "cohere:x", "http://e",
+                     check=lambda e, m: (False, f"{m} missing"))
+    assert r["model"] is None and r["skip"].startswith("no judge available")
+    assert "cohere:x missing" in r["skip"] and f"{vc.FALLBACK_MODEL} missing" in r["skip"]
+
+    r = vc.preflight("essay", vc.FALLBACK_MODEL, "http://e",
+                     check=lambda e, m: (False, "down"))
+    assert len(r["checks"]) == 1, "the fallback is not checked twice"
+    print("  preflight_names_the_skip_once: ok")
+
+
+def test_cli_form_alias_and_refusal():
+    script = os.path.join(HERE, "voice_critic.py")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, "A short essay paragraph with nothing in it.\n")
+        ok = subprocess.run([sys.executable, script, path, "--form", "post",
+                             "--json"], capture_output=True, text=True)
+        assert ok.returncode in (0, 1), ok.stderr
+        assert json.loads(ok.stdout)["form"] == "essay", ok.stdout
+        bad = subprocess.run([sys.executable, script, path, "--form",
+                              "paper section"], capture_output=True, text=True)
+        assert bad.returncode == 2 and "no voice-critic profile" in bad.stderr
+        pre = subprocess.run([sys.executable, script, "--preflight", "--form",
+                              "README"], capture_output=True, text=True)
+        assert pre.returncode == 0, pre.stderr
+        assert json.loads(pre.stdout)["form"] is None
+    print("  cli_form_alias_and_refusal: ok")
+
+
 def main():
+    test_form_aliases_resolve()
+    test_preflight_names_the_skip_once()
+    test_cli_form_alias_and_refusal()
     test_refuses_without_rubric()
     test_read_only()
     test_marker_profile_hand_computed()

@@ -57,7 +57,12 @@ Hard rules, checked mechanically over judge-identified instances:
 2. **Safe-enemy only.** Allowed targets: artifact, institution, category,
    the dead, past self. A person target is a violation.
 3. **Density caps** per 1000 words by form, counting L1 and above:
-   how-to 1, essay 2, polemic 3 (`--form`, default essay).
+   how-to 1, essay 2, polemic 3 (`--form`, default essay). `--form` also
+   takes aliases a caller may say instead: `post`, `blog post`,
+   `newsletter`, and `article` resolve to essay; `tutorial`, `guide`, and
+   `how to` to how-to; `op-ed` and `rant` to polemic. A form with no profile
+   — a paper section, a README, a chapter — is refused by name rather than
+   given a borrowed cap (GH-415).
 
 Any hard-rule violation makes the snark dimension FAIL and the flagged
 instances land in the report for the author gate.
@@ -115,7 +120,19 @@ python3 scripts/voice_critic.py draft.md --judge --model gemma4:12b   # keyless/
 
 # polemic caps, machine-readable report for the gate checklist
 python3 scripts/voice_critic.py draft.md --form polemic --json --report out.json
+
+# before a loop: resolve the form and pick a judge once
+python3 scripts/voice_critic.py --preflight --form "paper section"
 ```
+
+`--preflight` reads no file. It resolves `--form` and checks the judge —
+the configured model, then the keyless `gemma4:12b` fallback — with the
+same readiness check `--judge` relies on, and prints
+`{form, model, skip, checks}`. A caller that loops (polish-prose) runs it
+once and either passes the resolved form and model to every round or
+skips the stage with `skip` as the reason, so a missing key or an
+unpulled fallback is one named finding, not a failure per round. Using
+the fallback is listed in `checks`, never silent.
 
 Exit 0 when no dimension FAILs, 1 otherwise. Tests:
 `scripts/test_voice_critic.py` (offline; stub judges, no network).

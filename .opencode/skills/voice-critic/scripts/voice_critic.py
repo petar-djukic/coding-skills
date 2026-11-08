@@ -58,6 +58,7 @@ _MV = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)),
 if _MV not in sys.path:
     sys.path.insert(0, _MV)
 from rewrite import generate as _generate  # noqa: E402
+from rewrite import check_server as _check_server  # noqa: E402
 from critique import parse_model as _parse_model  # noqa: E402
 
 SK = os.path.dirname(os.path.realpath(__file__))
@@ -77,6 +78,70 @@ DEFAULT_ENDPOINT = os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434")
 # parses). VOICE_CRITIC_MODEL overrides; gemma4:12b remains the keyless/local
 # fallback.
 DEFAULT_MODEL = os.environ.get("VOICE_CRITIC_MODEL", "cohere:command-a-03-2025")
+FALLBACK_MODEL = "gemma4:12b"
+
+# Callers name forms in their own words — polish-prose's preflight says
+# "post" or "paper section" — and argparse refused anything outside the three
+# profiles, so the stage failed on its arguments every round and agents
+# improvised a different form each time (GH-415). Aliases map only where the
+# genre and its snark cap carry over; a form with no profile (paper section,
+# README, chapter) resolves to None, and the caller skips the stage by name
+# rather than borrowing a cap that was never set for it.
+FORM_ALIASES = {
+    "how to": "how-to", "howto": "how-to", "tutorial": "how-to",
+    "guide": "how-to",
+    "post": "essay", "blog post": "essay", "newsletter": "essay",
+    "article": "essay",
+    "op-ed": "polemic", "rant": "polemic",
+}
+
+
+def resolve_form(name):
+    """A DENSITY_CAPS key for ``name``, or None when the form has no profile."""
+    key = re.sub(r"\s+", " ", (name or "").strip().lower())
+    if key in DENSITY_CAPS:
+        return key
+    return FORM_ALIASES.get(key)
+
+
+def _form_arg(name):
+    form = resolve_form(name)
+    if form is None:
+        raise argparse.ArgumentTypeError(
+            f"form {name!r} has no voice-critic profile; known forms: "
+            f"{', '.join(sorted(DENSITY_CAPS))} (aliases: "
+            f"{', '.join(sorted(FORM_ALIASES))})")
+    return form
+
+
+def preflight(form, model=DEFAULT_MODEL, endpoint=DEFAULT_ENDPOINT,
+              check=_check_server):
+    """Decide once, before a run, whether the stage can run and how.
+
+    Returns {"form", "model", "skip", "checks"}. ``form`` is the resolved
+    profile or None; ``model`` is the first judge that answers its readiness
+    check — the configured one, then the keyless fallback — or None; ``skip``
+    names why the stage cannot run, or is None. A missing key and an unpulled
+    fallback then show up once, as a named skip, instead of failing every
+    round of a loop (GH-415). Choosing the fallback is reported in ``checks``,
+    so it is never silent.
+    """
+    resolved = resolve_form(form)
+    out = {"form_requested": form, "form": resolved, "model": None,
+           "skip": None, "checks": []}
+    if resolved is None:
+        out["skip"] = (f"form {form!r} has no voice-critic profile "
+                       f"(known: {', '.join(sorted(DENSITY_CAPS))})")
+        return out
+    for m in dict.fromkeys([model, FALLBACK_MODEL]):
+        ok, msg = check(endpoint, m)
+        out["checks"].append({"model": m, "ready": ok, "message": msg})
+        if ok:
+            out["model"] = m
+            return out
+    out["skip"] = "no judge available: " + "; ".join(
+        f"{c['model']}: {c['message']}" for c in out["checks"])
+    return out
 
 # A receipt, mechanically: a number, a percentage, a citation, or quoted
 # material — the evidence classes §3/§4 accept ahead of a verdict.
@@ -489,9 +554,11 @@ def render(report):
 def main():
     ap = argparse.ArgumentParser(
         description="read-only voice critic against voice-constitution.md")
-    ap.add_argument("file")
+    ap.add_argument("file", nargs="?")
     ap.add_argument("--voice-dir")
-    ap.add_argument("--form", choices=sorted(DENSITY_CAPS), default="essay")
+    ap.add_argument("--form", default="essay",
+                    help=f"{', '.join(sorted(DENSITY_CAPS))}, or an alias "
+                    f"({', '.join(sorted(FORM_ALIASES))})")
     ap.add_argument("--report", help="write the JSON report here as well")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--judge", action="store_true",
@@ -499,7 +566,21 @@ def main():
                     "(read-only: verdicts and quotes, never text)")
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    ap.add_argument("--preflight", action="store_true",
+                    help="resolve --form and check the judge (then the "
+                    f"{FALLBACK_MODEL} fallback) without reading a file; "
+                    "prints JSON and always exits 0 — read its skip field")
     a = ap.parse_args()
+
+    if a.preflight:
+        print(json.dumps(preflight(a.form, a.model, a.endpoint), indent=2))
+        return
+    if not a.file:
+        ap.error("a file is required unless --preflight is given")
+    try:
+        a.form = _form_arg(a.form)
+    except argparse.ArgumentTypeError as e:
+        ap.error(str(e))
 
     judge = OllamaJudge(a.endpoint, a.model) if a.judge else None
     report = Critic(a.file, voice_dir=a.voice_dir, form=a.form,

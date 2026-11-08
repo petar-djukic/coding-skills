@@ -44,9 +44,13 @@ const PREFLIGHT = {
     has_voice_corpus: { type: 'boolean' },
     has_voice_constitution: { type: 'boolean' },
     baseline_sha: { type: 'string' },
+    voice_form: { type: 'string' },
+    voice_model: { type: 'string' },
+    voice_skip: { type: 'string' },
   },
   required: ['ok', 'reason', 'branch', 'missing', 'focus_file', 'focus_items', 'precheck_command', 'form', 'protected_spans',
-    'roster_name', 'roster', 'draft_rules', 'has_front_matter', 'has_voice_corpus', 'has_voice_constitution', 'baseline_sha'],
+    'roster_name', 'roster', 'draft_rules', 'has_front_matter', 'has_voice_corpus', 'has_voice_constitution', 'baseline_sha',
+    'voice_form', 'voice_model', 'voice_skip'],
 }
 
 const HUMANIZE = {
@@ -160,7 +164,8 @@ const pre = await agent(`Preflight for a polish-prose run on ${ART}. The file ca
 5. Roster: read the roster table in ${SK}/critic-panel/references/personas.md. ${A.roster ? `The caller asks for roster ${JSON.stringify(A.roster)}; use it (a roster name or a list of persona names).` : 'Use "book" for a book chapter, "article" for everything else.'} Return roster_name and the persona names in roster order.
 6. The draft's own rules: per the "The draft's own rules" section of ${SK}/critic-panel/SKILL.md, list every rules file found beside or above the file (docs/constitutions/voice.yaml, docs/constitutions/argument.yaml, the chapter's SRD under docs/srd/, or a matching constitution under .agents/constitutions/) in draft_rules.
 7. Optional stages: has_front_matter = the file starts with a YAML front-matter block; has_voice_corpus = a writing-voice/ directory with exemplars is found walking up from the file (humanize needs it); has_voice_constitution = writing-voice/voice-constitution.md is found the same way (voice-critic needs it).
-8. ${A.validate_only ? 'Do not commit. Return baseline_sha as the current HEAD.' : `If ${ART} has uncommitted changes, commit them alone as "draft: <slug> (pre-pipeline baseline)". Return baseline_sha as HEAD after that.`}`,
+8. voice-critic readiness, once for the whole run: if has_voice_constitution, run ${SK}/voice-critic/scripts/voice_critic.py --preflight --form "<the form from step 4>" (in the skills' pixi environment, as ${SK}/voice-critic/SKILL.md says) and copy its JSON fields: voice_form = "form", voice_model = "model", voice_skip = "skip" (empty string for any null). Do not retry it with another form or model, and do not pull a model: a skip is a finding, reported once. If has_voice_constitution is false, return all three as empty strings.
+9. ${A.validate_only ? 'Do not commit. Return baseline_sha as the current HEAD.' : `If ${ART} has uncommitted changes, commit them alone as "draft: <slug> (pre-pipeline baseline)". Return baseline_sha as HEAD after that.`}`,
   { label: 'preflight', schema: PREFLIGHT, effort: 'low' })
 
 if (!pre || !pre.ok) {
@@ -170,6 +175,8 @@ const CRITICS = pre.roster && pre.roster.length ? pre.roster : DEFAULT_ROSTER
 const skipped = []
 if (!pre.has_voice_corpus) skipped.push('humanize (no writing-voice/ corpus found)')
 if (!pre.has_voice_constitution) skipped.push('voice-critic (no voice constitution found)')
+else if (pre.voice_skip || !pre.voice_form || !pre.voice_model) skipped.push(`voice-critic (${pre.voice_skip || 'preflight returned no form or judge'})`)
+const VOICE_READY = pre.has_voice_constitution && !pre.voice_skip && pre.voice_form && pre.voice_model
 if (!pre.has_front_matter) skipped.push('generation note (no front matter; the report is the record)')
 log(`branch ${pre.branch}; form ${pre.form || 'unknown'}; roster ${pre.roster_name || 'article'} (${CRITICS.join(', ')}); focus file ${pre.focus_file || 'none (generic read)'}; ${pre.protected_spans.length} protected spans${skipped.length ? `; skipping: ${skipped.join('; ')}` : ''}`)
 if (A.validate_only) {
@@ -299,10 +306,10 @@ ${list(pre.protected_spans)}
 Return the legs you ran (model names), every cross-family convergent finding as one line saying whether it was fixed, and the reserved items. ${NO_PROSE} ${HYGIENE}`,
     { label: `r${round}: ross read`, phase: 'Review', schema: ROSS })
 
-  const voice = pre.has_voice_constitution
-    ? await agent(`voice-critic on ${ART}: read ${SK}/voice-critic/SKILL.md and run its script read-only with the judge enabled and --form ${pre.form || 'essay'} --json. Return the dimensions that FAIL and each flagged span as one line (dimension, quoted span, line range). Never edit anything. ${HYGIENE}`,
+  const voice = VOICE_READY
+    ? await agent(`voice-critic on ${ART}: read ${SK}/voice-critic/SKILL.md and run its script read-only with --judge --form ${pre.voice_form} --model ${pre.voice_model} --json, exactly these values: preflight resolved them, and a different form or model is not yours to choose. If the run fails, return the failure as one flag; do not retry with other arguments. Return the dimensions that FAIL and each flagged span as one line (dimension, quoted span, line range). Never edit anything. ${HYGIENE}`,
       { label: `r${round}: voice-critic`, phase: 'Review', schema: VOICE, effort: 'low' })
-    : { failed: [], flags: ['skipped: no voice constitution found'] }
+    : { failed: [], flags: [`skipped: ${pre.has_voice_constitution ? (pre.voice_skip || 'preflight returned no form or judge') : 'no voice constitution found'}`] }
 
   const diff = await agent(`Did round ${round} change the prose of ${ART}? Run git diff ${outline.round_start_sha} -- ${ART} and count added or removed lines, ignoring lines that are only rst: marker comments or whitespace. Return prose_changed and the count.`,
     { label: `r${round}: diff`, phase: 'Review', schema: DIFF, effort: 'low' })
