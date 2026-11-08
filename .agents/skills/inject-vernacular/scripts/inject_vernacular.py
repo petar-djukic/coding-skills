@@ -131,6 +131,80 @@ def _recap_sentence_start(text, pos):
     return text
 
 
+# --- clause and citation guards (GH-407) -------------------------------------
+# Every operator below edits by pattern, and three of them turned a list or a
+# fragment into a "sentence": the Oxford-comma ", and" of a five-item list
+# split into "...tools, policy. And control flow, that is versioned", a colon
+# split left "Standing protection for the edge." standing alone, and a
+# semicolon split reached inside "[@baldoni-2025; @farrell-2019]". Without a
+# part-of-speech tagger the guards below are conservative on purpose: a
+# split they cannot vouch for is not made, and the operator's budget simply
+# goes unmet, which the report shows. A missed split costs a rate; a wrong
+# one costs a sentence the author has to find by hand.
+
+# A pandoc citation group or a numbered marker. Operators must leave these
+# byte-identical, the same protection locks get.
+_CITATION = re.compile(r"\[[^\[\]\n]*@[^\[\]\n]*\]|\[\d+(?:\s*[,\u2013-]\s*\d+)*\]")
+
+_SUBJECT_STARTERS = {
+    "the", "a", "an", "this", "that", "these", "those", "it", "its", "they",
+    "their", "we", "our", "he", "she", "his", "her", "i", "you", "your",
+    "no", "each", "every", "some", "most", "all", "any", "nothing",
+    "everything", "nobody", "everyone", "there", "both", "neither", "none",
+}
+_PRONOUN_SUBJECTS = {"it", "he", "she", "this", "one", "nothing",
+                     "everything", "nobody", "everyone", "someone"}
+_DETERMINERS = {"the", "a", "an", "this", "that", "these", "those", "its",
+                "their", "our", "his", "her", "your", "no", "each", "every",
+                "some", "most"}
+_FINITE = {"is", "are", "was", "were", "has", "have", "had", "do", "does",
+           "did", "will", "would", "can", "could", "should", "shall", "may",
+           "might", "must", "isn't", "aren't", "wasn't", "weren't", "doesn't",
+           "don't", "didn't", "won't", "can't", "cannot", "hasn't", "haven't"}
+
+
+def _tokens(text):
+    return re.findall(r"[A-Za-z][A-Za-z'-]*[,;:]?", text)
+
+
+def _has_finite_verb(text):
+    """True when ``text`` shows a finite verb a heuristic can vouch for: an
+    auxiliary or modal, a past form in -ed, or a third-person -s form right
+    after a pronoun subject or after determiner + noun. Plurals followed by
+    a comma ("the chosen roles,") are not taken for verbs."""
+    raw = _tokens(text)
+    toks = [t.rstrip(",;:").lower() for t in raw]
+    for i, t in enumerate(toks):
+        if t in _FINITE or (len(t) > 4 and t.endswith("ed")):
+            return True
+        nxt = i + 1
+        if t in _PRONOUN_SUBJECTS and nxt < len(toks):
+            v = toks[nxt]
+            if v.endswith("s") and not v.endswith("ss") and raw[nxt][-1] not in ",;:":
+                return True
+        if t in _DETERMINERS and i + 2 < len(toks):
+            v = toks[i + 2]
+            if (v.endswith("s") and not v.endswith("ss")
+                    and raw[i + 1][-1] not in ",;:" and raw[i + 2][-1] not in ",;:"):
+                return True
+    return False
+
+
+def _starts_clause(text):
+    toks = _tokens(text)
+    return bool(toks) and toks[0].rstrip(",;:").lower() in _SUBJECT_STARTERS
+
+
+def _is_clause(text, need_verb=True):
+    """Can ``text`` stand as a sentence? It must open on a subject word,
+    and, unless need_verb is False, carry a finite verb."""
+    return _starts_clause(text) and (not need_verb or _has_finite_verb(text))
+
+
+def _inside_brackets(text, pos):
+    return text.rfind("[", 0, pos) > text.rfind("]", 0, pos)
+
+
 # --- the edit engine ---------------------------------------------------------
 
 class Editor:
@@ -144,10 +218,17 @@ class Editor:
         self.judge = judge
         self.critic_flags = critic_flags or []
         self.edits = []
+        self.refused = []
 
     def apply(self, operator, idx, new_text, note=""):
         before = self.texts[idx]
         if new_text == before:
+            return False
+        if _CITATION.findall(before) != _CITATION.findall(new_text):
+            # Refused before the judge sees it: a bibliography break is not
+            # a judgment call (GH-407, "[@a; @b]" -> "[@a. @b]").
+            self.refused.append({"operator": operator, "paragraph": idx,
+                                 "reason": "citation span changed"})
             return False
         kept = True
         if self.judge is not None:
@@ -233,6 +314,15 @@ def op_colon_verdict(ed, marker, rx, words):
                 if applied >= b:
                     break
                 text = ed.texts[idx]
+                # The right side becomes a sentence of its own, so it must be
+                # one: "assembles the mitigation: filter the attack sources"
+                # split into an imperative, and "the starkest column is energy
+                # optimization: no Actuator and no Guardian" into a verbless
+                # fragment (GH-407).
+                rhs_end = re.search(r"[.!?](?:\s|$)", text[m.start(2):])
+                rhs = text[m.start(2):m.start(2) + rhs_end.start()] if rhs_end else text[m.start(2):]
+                if not _is_clause(rhs) or _inside_brackets(text, m.start()):
+                    continue
                 new = text[:m.start()] + split(m) + text[m.end():]
                 if ed.apply("colon-verdict", idx, new):
                     applied += 1
@@ -240,6 +330,49 @@ def op_colon_verdict(ed, marker, rx, words):
 
 _PAREN_ASIDE = re.compile(r" \(([^()\n]{4,80})\)")
 _DASH_ASIDE = re.compile(r"—([^—\n]{4,80})—")
+_ANY_PAREN = re.compile(r"\([^()\n]*\)")
+
+
+def _dash_form(texts):
+    """The document's own em-dash: (open, close) around an aside.
+
+    The chain normalises Unicode dashes elsewhere, and a file written with
+    ASCII "--" came back with "configuration—AutoGen— [@wu-2023]" (GH-407).
+    The form the document already uses wins; a document with no dash yet
+    gets the Unicode one, as before."""
+    joined = "\n".join(texts)
+    ascii_n = len(re.findall(r"(?<!-)--(?!-)", joined))
+    if ascii_n <= joined.count("—"):
+        return "—", "—"
+    spaced = len(re.findall(r"(?<=\s)--(?=\s)", joined))
+    return (" -- ", " --") if spaced * 2 >= ascii_n else ("--", "--")
+
+
+def _paren_to_dash(ed, b):
+    """Convert " (aside)" to a dash pair, at most b dashes' worth.
+
+    Skipped, rather than converted: an aside followed by anything but a
+    word ("(operations), which" would leave "—operations—,"; "(AutoGen)
+    [@wu-2023]" a dash against the citation), and an aside in a sentence
+    holding another parenthetical, where it is one item of a parallel
+    series and its siblings keep their parentheses."""
+    open_d, close_d = _dash_form(ed.texts)
+    applied = 0
+    for idx in range(len(ed.texts)):
+        if applied >= b:
+            break
+        for m in reversed(list(_PAREN_ASIDE.finditer(ed.texts[idx]))):
+            if applied >= b:
+                break
+            text = ed.texts[idx]
+            if not re.match(r" [A-Za-z]", text[m.end():m.end() + 2]):
+                continue
+            start, end = _sentence_bounds(text, m.start() + 1)
+            if len(_ANY_PAREN.findall(text[start:end])) > 1:
+                continue
+            new = text[:m.start()] + open_d + m.group(1) + close_d + text[m.end():]
+            if ed.apply("em-dash", idx, new):
+                applied += 2
 
 
 def op_em_dash(ed, marker, rx, words):
@@ -248,8 +381,7 @@ def op_em_dash(ed, marker, rx, words):
     b = _budget(count, words, target, +1)
     if b:
         # Each parenthetical-to-dash conversion adds two dashes.
-        ed.sub_counted("em-dash", _PAREN_ASIDE, "—\\1—", b,
-                       delta_per_edit=2)
+        _paren_to_dash(ed, b)
         return
     b = _budget(count, words, target, -1)
     if b:
@@ -438,14 +570,42 @@ def op_sentence_split(ed, marker, rx, words):
             # one split per pass; re-scan so offsets stay honest
 
 
+def _list_final_conjunction(sent, pos):
+    """True when the ", and" at ``pos`` closes a series rather than joining
+    two clauses: the item before it is short and itself follows a comma
+    ("model, prompt, tools, policy, and control flow"), or a colon
+    introduced the run ("nothing versions it, nothing reviews it, and no
+    artifact records")."""
+    head = sent[:pos]
+    prev = max(head.rfind(","), head.rfind(";"))
+    if prev != -1 and len(head[prev + 1:].split()) <= 5:
+        return True
+    colon = head.rfind(":")
+    return colon != -1 and head.find(",", colon) != -1
+
+
 def _split_sentence(sent):
-    semi = sent.find("; ")
-    if semi != -1:
-        head, tail = sent[:semi], sent[semi + 2:]
+    for sm in re.finditer(r"; ", sent):
+        if _inside_brackets(sent, sm.start()):
+            continue
+        head, tail = sent[:sm.start()], sent[sm.end():]
+        # A semicolon also separates complex list items ("Paris, France;
+        # Rome, Italy"), so the tail must open like a clause.
+        if not _is_clause(tail, need_verb=False):
+            continue
         return head + ". " + (tail[:1].upper() + tail[1:])
     mid = len(sent) // 2
     best, best_dist = None, None
     for cm in re.finditer(r", (and|but) ", sent):
+        if _inside_brackets(sent, cm.start()):
+            continue
+        if _list_final_conjunction(sent, cm.start()):
+            continue
+        left, right = sent[:cm.start()], sent[cm.end():]
+        # Both sides must be clauses with a finite verb, or the split leaves
+        # a fragment ("...tools, policy. And control flow, that is...").
+        if not (_has_finite_verb(left) and _is_clause(right)):
+            continue
         d = abs(cm.start() - mid)
         if best is None or d < best_dist:
             best, best_dist = cm, d
@@ -751,6 +911,7 @@ def run(path, voice_dir=None, judge=None, critic_flags=None,
     report["edits_total"] = len(ed.edits)
     report["edits_kept"] = len(kept)
     report["edits_dropped"] = len(ed.edits) - len(kept)
+    report["edits_refused"] = ed.refused
     return doc, ed, report
 
 
@@ -804,7 +965,8 @@ def main():
         print(json.dumps(report, indent=2))
     else:
         print(f"{a.file}: {report['edits_kept']} edit(s) applied"
-              f" ({report['edits_dropped']} dropped by verifier)"
+              f" ({report['edits_dropped']} dropped by verifier"
+              f", {len(report['edits_refused'])} refused: citation span changed)"
               f"{' [dry-run]' if a.dry_run else ''}")
         for mid, m in report["markers"].items():
             tgt = "-" if m["target"] is None else m["target"]

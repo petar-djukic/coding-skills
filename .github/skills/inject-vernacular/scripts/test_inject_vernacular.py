@@ -642,6 +642,135 @@ def test_no_substrate_unchanged():
         assert "But the gate is closed. Suppose you have a task." in doc.text()
     print("  no_substrate_unchanged: ok")
 
+# --- GH-407 regressions: each input is the reported case, verbatim where the
+# issue quotes it.
+
+def test_dash_uses_the_documents_ascii_form():
+    text = (FILLER + "The chain -- humanize, then review -- ran twice. "
+            "The gate (the mechanical half) held again this week.\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, text, em_dash=50.0)
+        doc, ed, _ = iv.run(path)
+        out = doc.text()
+        assert "gate -- the mechanical half -- held" in out, out
+        assert "\u2014" not in out
+    print("  dash_uses_the_documents_ascii_form: ok")
+
+
+def test_dash_never_against_citation_or_punctuation():
+    text = (FILLER +
+            "It sits in the agent's own published configuration (AutoGen) [@wu-2023]. "
+            "That work has a name, network management (operations), which includes "
+            "the alarms.\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, text, em_dash=50.0)
+        doc, ed, _ = iv.run(path)
+        out = doc.text()
+        assert "(AutoGen) [@wu-2023]" in out, out
+        assert "(operations), which" in out, out
+    print("  dash_never_against_citation_or_punctuation: ok")
+
+
+def test_dash_skips_a_parenthetical_in_a_series():
+    text = (FILLER + "Each framework stores it differently, in a graph (LangGraph), "
+            "in a crew file (CrewAI) and in a published configuration of its own.\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, text, em_dash=50.0)
+        doc, ed, _ = iv.run(path)
+        out = doc.text()
+        assert "(LangGraph)" in out and "(CrewAI)" in out, out
+    print("  dash_skips_a_parenthetical_in_a_series: ok")
+
+
+def test_split_never_at_a_lists_final_and():
+    long_sent = ("Each role becomes one configuration, holding its model, prompt, "
+                 "tools, policy, and control flow, that is versioned and reviewed "
+                 "like a Kubernetes manifest by the platform team before every "
+                 "release reaches the production cluster.")
+    assert len(long_sent.split()) > 30
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, FILLER + long_sent + "\n")
+        doc, ed, _ = iv.run(path)
+        out = doc.text()
+        assert "policy, and control flow" in out, out
+        assert "policy. And" not in out
+    print("  split_never_at_a_lists_final_and: ok")
+
+
+def test_split_never_after_a_colon_series():
+    long_sent = ("The role has no home today: nothing versions it, nothing reviews "
+                 "it apart from the application that happens to embed it, and no "
+                 "artifact records which version of it ran in production last week.")
+    assert len(long_sent.split()) > 30
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, FILLER + long_sent + "\n")
+        doc, ed, _ = iv.run(path)
+        assert ". And no artifact" not in doc.text()
+    print("  split_never_after_a_colon_series: ok")
+
+
+def test_split_still_joins_two_clauses():
+    long_sent = ("The scheduler assigns a slot to the link in every frame of the "
+                 "schedule, and the controller confirms the assignment against the "
+                 "demand matrix before any of the nodes transmit in that slot.")
+    assert len(long_sent.split()) > 30
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, FILLER + long_sent + "\n")
+        doc, ed, _ = iv.run(path)
+        assert "schedule. And the controller confirms" in doc.text(), doc.text()
+    print("  split_still_joins_two_clauses: ok")
+
+
+def test_semicolon_inside_a_citation_group_is_never_split():
+    long_sent = ("Earlier work places the role in the orchestration layer and treats "
+                 "the configuration as an application detail that nobody versions "
+                 "[@baldoni-2025; @farrell-2019] across the whole lifecycle of a team "
+                 "that ships agents to production every week.")
+    assert len(long_sent.split()) > 30
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, FILLER + long_sent + "\n")
+        doc, ed, report = iv.run(path)
+        assert "[@baldoni-2025; @farrell-2019]" in doc.text(), doc.text()
+    print("  semicolon_inside_a_citation_group_is_never_split: ok")
+
+
+def test_editor_refuses_a_citation_change():
+    ed = iv.Editor(["As shown [@a; @b], it holds."])
+    assert ed.apply("x", 0, "As shown [@a. @b], it holds.") is False
+    assert ed.texts[0] == "As shown [@a; @b], it holds."
+    assert ed.refused and ed.refused[0]["reason"] == "citation span changed"
+    assert not ed.edits, "a refused edit is not logged as judged"
+    print("  editor_refuses_a_citation_change: ok")
+
+
+def test_colon_split_needs_a_clause_on_the_right():
+    text = (FILLER +
+            "The playbook assembles the mitigation: filter the attack sources and "
+            "divert the rest. The planner originates a hardening intent: standing "
+            "protection for the edge. The starkest column is energy optimization: "
+            "no Actuator and no Guardian. The review settled one thing: the gate "
+            "was wrong.\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = make_repo(tmp, text, colon_verdict=0.0)
+        doc, ed, _ = iv.run(path)
+        out = doc.text()
+        assert "mitigation: filter" in out, "an imperative is not a sentence"
+        assert "intent: standing" in out, "a verbless fragment is not a sentence"
+        assert "optimization: no Actuator" in out
+        assert "one thing. The gate was wrong." in out, out
+    print("  colon_split_needs_a_clause_on_the_right: ok")
+
+
+def test_clause_heuristic():
+    assert iv._is_clause("the gate was wrong")
+    assert iv._is_clause("it holds the line")
+    assert iv._is_clause("the reviewer wants a second pass")
+    assert not iv._is_clause("filter the attack sources")
+    assert not iv._is_clause("standing protection for the edge")
+    assert not iv._is_clause("the chosen roles, the channels among them")
+    assert not iv._is_clause("one column per use case")
+    print("  clause_heuristic: ok")
+
 
 def main():
     test_refuses_without_voice_dir()
@@ -674,6 +803,16 @@ def main():
     test_calque_idempotent_and_logged()
     test_calque_verifier_can_drop()
     test_no_substrate_unchanged()
+    test_dash_uses_the_documents_ascii_form()
+    test_dash_never_against_citation_or_punctuation()
+    test_dash_skips_a_parenthetical_in_a_series()
+    test_split_never_at_a_lists_final_and()
+    test_split_never_after_a_colon_series()
+    test_split_still_joins_two_clauses()
+    test_semicolon_inside_a_citation_group_is_never_split()
+    test_editor_refuses_a_citation_change()
+    test_colon_split_needs_a_clause_on_the_right()
+    test_clause_heuristic()
     print("test_inject_vernacular: all assertions passed")
 
 
