@@ -25,6 +25,8 @@ harness and the contract.
 
 Every rule below has a run that broke without it.
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 1. **>= 2 payloads, real published material, never toy prompts.**
    Single-draft verdicts reversed twice (GH-160 vs GH-166/168). A
    verdict from one payload is a note, not a result.

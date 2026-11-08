@@ -38,6 +38,8 @@ The local register metrics moved the other way in the same run:
 `passive_enabling_per_500w` 0.0 → 0.5, `salad_rate_per_100` 5.5 → 8.3,
 `opening_diversity` 0.72 → 0.67. Academic passive-voice prose scores zero.
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 Two facts sit behind this. Pangram rated the author's own hand-written prose
 77.8% AI, and `filter-tells` catches only 24% of real AI documents (GH-192).
 **Neither detector is a reliable proxy for "reads as human" on its own.** The

@@ -415,6 +415,8 @@ nothing else in the pipeline was looking.
 
 ## What the panel buys, measured
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 Strategy Theatre, 2026-08-22 (substack GH-181): three critics converged
 independently on one diagnosis — the piece explained its receipts after
 they landed — and caught two typos the gates had missed. Applying 27
