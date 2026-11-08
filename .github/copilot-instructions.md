@@ -101,7 +101,17 @@ Do not use: critical, critically, key, deliberate, strategic, precisely, absolut
 
 ## Diagrams
 
-All diagrams in Mermaid, defined inline in markdown fenced code blocks. Do not create separate image files.
+Mermaid is the default. The form follows where the figure is read and which notation it needs.
+
+Table: Diagram form by use
+
+| Use | Form | Why |
+|------|------|-----|
+| Specifications, READMEs, simple flow and component diagrams | Mermaid, inline in a fenced `mermaid` block | GitHub renders it in place, with no committed image and no build step |
+| UML notation (deployment, component, class, state, activity, use case) and paper figures | d2 source committed beside its rendered PNG, embedded as a markdown image | Mermaid has no UML deployment diagram; one d2 source compiles to the paper's PDF and the wiki's PNG; a PNG renders in every viewer, including ones that show Mermaid fences as raw code |
+| Wiki figures | SVG files under `figures/` beside the wiki, embedded as markdown images | renders in any markdown viewer (Obsidian, a plain preview), and `mage wiki` inlines it theme-aware |
+
+Commit the d2 source with its PNG, and regenerate the PNG in the same commit as any change to the source; an image whose source is missing or out of date cannot be maintained. Draw wiki SVGs in the Loom palette (ink `#20262c`, ground `#f6f7f5`, accent `#c0612b`) with a full-size ground rectangle, which is what lets `mage wiki` swap the theme. The Loom wiki (`petar-djukic/autogenic-systems`, `agent-dsl/wiki.md`) is the reference. Do not use PlantUML: GitHub does not render it. A repository may still narrow this further in its own rules, as autogenic-systems does by drawing every diagram in d2.
 
 ## Document Types and Locations
 
@@ -196,7 +206,7 @@ Order matters. A reader who scans only the first three sections should understan
 
 2. **Architectural thesis** -- The "why" in 2-4 sentences. What engineering problem does the approach solve? Methodology (e.g., spec-driven development, differential testing) is introduced here as the solution to a stated problem, not as a label.
 
-3. **System diagram** -- Mermaid showing component relationships, the development pipeline, or the data flow. Architecture diagrams signal systems thinking more effectively than any paragraph. Use fenced code blocks with `mermaid` language tag. Do not use PlantUML (GitHub does not render it).
+3. **System diagram** -- Mermaid showing component relationships, the development pipeline, or the data flow. Architecture diagrams signal systems thinking more effectively than any paragraph. Use fenced code blocks with `mermaid` language tag, which GitHub renders in place. When the diagram needs UML notation Mermaid lacks (a deployment diagram, for one), draw it in d2 and embed the committed PNG beside its source, per the Diagrams section of documentation-standards.md. Do not use PlantUML (GitHub does not render it).
 
 4. **Project scope and status** -- What is the target, what is built, what is planned. Use concrete numbers (e.g., "12 of 123 utilities specified"). Scope demonstrates ambition; status demonstrates execution.
 
