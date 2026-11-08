@@ -12,7 +12,8 @@ skill must report that and stop — falling back to a Claude rewrite would
 defeat the decorrelation the pipeline exists for.
 
 Defaults to cohere:command-a-03-2025 (the GH-138/142 bake-off winner on
-Pangram; needs COHERE_API_KEY / COHERE_SECRETS_FILE). The GH-163 local models
+Pangram; needs a Cohere key: COHERE_API_KEY, COHERE_SECRETS_FILE, or
+.secrets/). The GH-163 local models
 are the no-egress fallback via --model or MATCH_VOICE_MODEL: gemma4:12b runs
 anywhere, gemma4:31b-mlx keeps 31b-tier quality on a 32 GB Apple Silicon box,
 gemma4:31b-cloud when the memory is not there. SKILL.md has the tiers.
@@ -242,10 +243,21 @@ def _cohere_blocks(parts):
     return "".join(text), "".join(thinking), other
 
 
+_SHARED_SCRIPTS = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "..", "..", "..", "scripts"))
+
+
 def _cohere_key():
     """Cohere API key from COHERE_API_KEY, else the JSON file named by
-    COHERE_SECRETS_FILE (key 'cohere'). Returns None if neither yields one.
-    Never hardcoded; the key value never lives in this repo."""
+    COHERE_SECRETS_FILE (key 'cohere'), else the repository's .secrets/
+    (service 'cohere', discovered by walking up from the working directory).
+    Returns None if none yields one. Never hardcoded, never printed.
+
+    .secrets/ is where the secrets rule puts keys, and before GH-429 this
+    lookup skipped it: on a machine whose key lived only there, every Cohere
+    call failed and each agent improvised its own workaround or fallback.
+    An unsafe or placeholder .secrets/ raises RuntimeError with the reason
+    (never the value), rather than reading as "no key"."""
     key = os.environ.get("COHERE_API_KEY")
     if key:
         return key.strip()
@@ -256,7 +268,17 @@ def _cohere_key():
                 return (json.load(fh).get("cohere") or "").strip() or None
         except Exception:  # noqa: BLE001
             return None
-    return None
+    if _SHARED_SCRIPTS not in sys.path:
+        sys.path.insert(0, _SHARED_SCRIPTS)
+    try:
+        import credentials
+    except ImportError:
+        return None
+    try:
+        found = credentials.resolve("cohere", required=False)
+    except credentials.SecretsError as e:
+        raise RuntimeError(f"Cohere key in .secrets/ refused: {e}")
+    return found.strip() if found else None
 
 
 def _is_cohere(model):
@@ -312,8 +334,9 @@ def _cohere_generate(prompt, model, temperature, timeout, system=None,
     if not key:
         raise RuntimeError(
             "no Cohere API key. Set COHERE_API_KEY, or COHERE_SECRETS_FILE to a "
-            "JSON file with a 'cohere' key. match-voice does not fall back to "
-            "Claude: that would defeat its purpose.")
+            "JSON file with a 'cohere' key, or add 'cohere' to the repository's "
+            ".secrets/keys.json. match-voice does not fall back to Claude: that "
+            "would defeat its purpose.")
     messages = []
     if system is not None:
         messages.append({"role": "system", "content": system})
@@ -512,9 +535,14 @@ def _check_cohere(model):
     since it is the one configuration measured to fail outright on a long
     prompt, and check_server runs before a batch rather than during it."""
     name = model[len(COHERE_PREFIX):]
-    if not _cohere_key():
+    try:
+        key = _cohere_key()
+    except RuntimeError as e:
+        return False, str(e)
+    if not key:
         return False, ("no Cohere API key. Set COHERE_API_KEY, or "
-                       "COHERE_SECRETS_FILE to a JSON file with a 'cohere' key.")
+                       "COHERE_SECRETS_FILE to a JSON file with a 'cohere' key, "
+                       "or add 'cohere' to the repository's .secrets/keys.json.")
     if COHERE_THINKING == "disabled":
         return True, (f"Cohere ready, model {name} — WARNING: COHERE_THINKING="
                       "disabled gives a deterministic 422 "

@@ -17,6 +17,44 @@ if SCRIPTS not in sys.path:
 import rewrite  # noqa: E402
 
 
+import contextlib
+import tempfile
+
+
+@contextlib.contextmanager
+def _isolated_cwd():
+    """A temporary working directory with no .secrets/ above it."""
+    prev = os.getcwd()
+    with tempfile.TemporaryDirectory() as d:
+        d = os.path.realpath(d)
+        assert not any(os.path.isdir(os.path.join(p, ".secrets"))
+                       for p in _ancestors(d)), "temp dir sits under a .secrets/"
+        os.chdir(d)
+        try:
+            yield d
+        finally:
+            os.chdir(prev)
+
+
+def _ancestors(d):
+    while True:
+        yield d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return
+        d = parent
+
+
+def _write_secrets(d, data):
+    sd = os.path.join(d, ".secrets")
+    os.makedirs(sd, mode=0o700)
+    os.chmod(sd, 0o700)
+    path = os.path.join(sd, "keys.json")
+    with open(path, "w") as fh:
+        json.dump(data, fh)
+    os.chmod(path, 0o600)
+
+
 def _fake_response(payload):
     """A context-manager stand-in for urlopen returning JSON bytes."""
     cm = mock.MagicMock()
@@ -78,10 +116,40 @@ class CohereRouting(unittest.TestCase):
     def test_missing_key_raises_not_falls_back(self):
         env = {k: v for k, v in os.environ.items()
                if k not in ("COHERE_API_KEY", "COHERE_SECRETS_FILE")}
-        with mock.patch.dict(os.environ, env, clear=True):
+        # From a directory with no .secrets/ above it, so the operator's own
+        # key (often in ~/.secrets) cannot make this test pass by accident.
+        with _isolated_cwd(), mock.patch.dict(os.environ, env, clear=True):
             with self.assertRaises(RuntimeError) as ctx:
                 rewrite.generate("p", model="cohere:command-a-03-2025")
         self.assertIn("Cohere API key", str(ctx.exception))
+        self.assertIn(".secrets", str(ctx.exception))
+
+    def test_key_from_dot_secrets(self):
+        """GH-429: the secrets rule's directory is the third source."""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("COHERE_API_KEY", "COHERE_SECRETS_FILE")}
+        with _isolated_cwd() as d, mock.patch.dict(os.environ, env, clear=True):
+            _write_secrets(d, {"cohere": "dir-key"})
+            self.assertEqual(rewrite._cohere_key(), "dir-key")
+            ok, msg = rewrite.check_server("http://unused", "cohere:command-a-03-2025")
+            self.assertTrue(ok, msg)
+            self.assertNotIn("dir-key", msg)
+
+    def test_environment_beats_dot_secrets(self):
+        env = {k: v for k, v in os.environ.items() if k != "COHERE_SECRETS_FILE"}
+        env["COHERE_API_KEY"] = "env-key"
+        with _isolated_cwd() as d, mock.patch.dict(os.environ, env, clear=True):
+            _write_secrets(d, {"cohere": "dir-key"})
+            self.assertEqual(rewrite._cohere_key(), "env-key")
+
+    def test_placeholder_in_dot_secrets_is_refused_by_name(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("COHERE_API_KEY", "COHERE_SECRETS_FILE")}
+        with _isolated_cwd() as d, mock.patch.dict(os.environ, env, clear=True):
+            _write_secrets(d, {"cohere": "REPLACE-ME"})
+            ok, msg = rewrite.check_server("http://unused", "cohere:command-a-03-2025")
+            self.assertFalse(ok)
+            self.assertIn("placeholder", msg)
 
     def test_key_from_secrets_file(self):
         import tempfile
