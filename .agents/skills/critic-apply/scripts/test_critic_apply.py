@@ -319,6 +319,64 @@ def test_rationale_leak_is_kept_gate_in_a_run():
     print("  rationale_leak_is_kept_gate_in_a_run: ok")
 
 
+# --- GH-441: deletions that lean on a kept rewrite are kept with it ---
+
+P3 = ("Surveys of LLM-based agents collect dozens of definitions across 12 papers. "
+      "This paper focuses on one property. "
+      "An agent is software that handles inputs not fully known at design time. "
+      "The operators read the dashboard daily.")
+P3_REWRITE = "Surveys of LLM-based agents collect dozens of definitions across 12 papers."
+P3_DEF = "An agent is software that handles inputs not fully known at design time."
+P3_OTHER = "The operators read the dashboard daily."
+
+
+def _p3_sheet():
+    move = ("Surveys collect dozens of definitions; here an agent is software "
+            "that handles inputs not fully known at design time.")
+    return sheet(conv(P3_REWRITE, [("a", move, "lead with the definition"),
+                                   ("b", move, "definition first")]) +
+                 conv(P3_DEF, [("a", "CUT", "moved up"), ("b", "CUT", "moved up")]) +
+                 conv(P3_OTHER, [("a", "CUT", "off topic"), ("b", "CUT", "off topic")]))
+
+
+def test_cut_paired_with_a_kept_rewrite_is_kept():
+    art = "# T\n\n" + P3 + "\n"
+    # the rewrite drops "12", so the number gate keeps it
+    gen = lambda prompt: prompt.split("Paragraph:\n", 1)[1].replace(
+        P3_REWRITE, "Surveys collect dozens of definitions; here an agent is software that handles inputs not fully known at design time.")
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(_p3_sheet()), generate=gen)
+    by = {r["quote"][:20]: r for r in recs}
+    assert by[P3_REWRITE[:20]]["status"] == "kept-gate", recs
+    assert by[P3_DEF[:20]]["status"] == "kept-gate", recs
+    assert "paired rewrite kept" in by[P3_DEF[:20]]["cause"], recs
+    assert P3_DEF in new, "the definition must survive when its move is gated"
+    assert by[P3_OTHER[:20]]["status"] == "applied-deletion", "an unrelated cut still lands"
+    assert P3_OTHER not in new
+    print("  cut_paired_with_a_kept_rewrite_is_kept: ok")
+
+
+def test_cut_paired_with_an_applied_rewrite_lands():
+    art = "# T\n\n" + P3 + "\n"
+    gen = lambda prompt: prompt.split("Paragraph:\n", 1)[1].replace(
+        P3_REWRITE, "Surveys collect dozens of definitions across 12 papers; here an agent is software that handles inputs not fully known at design time.")
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(_p3_sheet()), generate=gen)
+    assert [r["status"] for r in recs] == ["applied-rewrite", "applied-deletion", "applied-deletion"], recs
+    assert "here an agent is software" in new
+    print("  cut_paired_with_an_applied_rewrite_lands: ok")
+
+
+def test_all_dependent_leaves_the_paragraph_byte_identical():
+    art = "# T\n\n" + P3 + "\n"
+    sh = sheet(conv(P3_REWRITE, [("a", "Surveys collect definitions; an agent is software that handles inputs not fully known at design time.", "x"),
+                                 ("b", "Surveys collect definitions; an agent is software that handles inputs not fully known at design time.", "y")]) +
+               conv(P3_DEF, [("a", "CUT", "moved"), ("b", "CUT", "moved")]))
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh),
+                                    generate=lambda p: "Too short.")
+    assert {r["status"] for r in recs} == {"kept-gate"}, recs
+    assert new == art
+    print("  all_dependent_leaves_the_paragraph_byte_identical: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -337,4 +395,7 @@ if __name__ == "__main__":
     test_instruction_echo_is_kept()
     test_plain_rewrite_and_existing_vocabulary_pass()
     test_rationale_leak_is_kept_gate_in_a_run()
+    test_cut_paired_with_a_kept_rewrite_is_kept()
+    test_cut_paired_with_an_applied_rewrite_lands()
+    test_all_dependent_leaves_the_paragraph_byte_identical()
     print("all critic-apply tests passed")
