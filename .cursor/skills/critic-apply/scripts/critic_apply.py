@@ -281,7 +281,74 @@ def _decide(paras, t, protected, cheap):
                                     t["entries"][0]["body"]))
 
 
+def _content_words(text):
+    return {w for w in _words_lower(text) if len(w) > 3}
+
+
+def _dependent_deletions(steps):
+    """Deletions that lean on a rewrite the chain did not apply (GH-441).
+
+    The sheet carries no finding ids, so the link is read off the text: a
+    deletion depends on a kept rewrite when most of what it removes appears
+    in that rewrite's proposed replacement, i.e. the critics cut the
+    sentence because the rewrite was going to carry its content. In the S2
+    run the gate kept the rewrite that moved P3's working definition, the
+    cuts of the definition went in anyway, and "This property" was left
+    pointing at nothing. Returns {id(rec): reason}."""
+    kept_rewrites = [(t, rec) for t, rec, kind, _d in steps
+                     if kind == "rewrite" and not rec.get("status", "").startswith("applied")]
+    out = {}
+    if not kept_rewrites:
+        return out
+    for t, rec, kind, data in steps:
+        if kind not in ("cut", "trim") or rec.get("status") != "applied-deletion":
+            continue
+        removed = _content_words(t["quote"])
+        if kind == "trim":
+            removed -= _content_words(data or "")
+        if not removed:
+            continue
+        for rt, rrec in kept_rewrites:
+            carried = set().union(*(_content_words(e["body"]) for e in rt["entries"]))
+            if len(removed & carried) * 2 >= len(removed):
+                out[id(rec)] = (f"paired rewrite kept ({rrec.get('status')}"
+                                f"{': ' + rrec['cause'] if rrec.get('cause') else ''}): "
+                                f"{rt['quote'][:60]}")
+                break
+    return out
+
+
 def _apply_chain(par_text, steps, generate):
+    """The chain, re-run without any deletion whose paired rewrite was kept,
+    until no such deletion remains. Model answers are cached by prompt, so a
+    re-run re-asks only where the paragraph text it shows has changed."""
+    cache = {}
+
+    def cached(prompt):
+        if prompt not in cache:
+            cache[prompt] = generate(prompt)
+        return cache[prompt]
+
+    gen = cached if generate is not None else None
+    held = {}
+    for _ in range(len(steps) + 1):
+        live = [st for st in steps if id(st[1]) not in held]
+        for _t, rec, _k, _d in live:
+            rec.pop("status", None)
+            rec.pop("cause", None)
+        final = _run_chain(par_text, live, gen)
+        new = _dependent_deletions(live)
+        if not new:
+            break
+        held.update(new)
+    for _t, rec, _k, _d in steps:
+        if id(rec) in held:
+            rec["status"] = "kept-gate"
+            rec["cause"] = held[id(rec)]
+    return final
+
+
+def _run_chain(par_text, steps, generate):
     """Apply every planned target to one paragraph, in document order.
 
     Each step works on the text the previous step left (GH-430: one edit

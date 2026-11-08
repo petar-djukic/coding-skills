@@ -65,6 +65,14 @@ rules decide, and the rules are arguable because they are deterministic.
   chain without a cut is checked against the original paragraph at the
   end and rolled back to its longest prefix inside the 0.5–1.35× band,
   the dropped steps recorded `kept-chain-drift`.
+- **A deletion that leans on a kept rewrite is kept too** (GH-441). The
+  sheet carries no finding ids, so the link is read off the text: when
+  most of a cut sentence's content words appear in the proposed
+  replacement of a rewrite the gate kept, the cut was made because the
+  rewrite would carry that content, and applying it alone loses it. Such a
+  cut is recorded `kept-gate` with the rewrite named as the cause, and the
+  paragraph's chain is re-run without it (model answers are cached, so
+  only prompts whose paragraph text changed are asked again).
 - **Paragraphs run concurrently** (`--jobs`, default 4; 1 is sequential).
   Each model call still carries one paragraph and one sentence, and the
   output does not depend on `--jobs`.
