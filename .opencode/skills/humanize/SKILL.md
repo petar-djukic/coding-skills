@@ -151,8 +151,8 @@ default. Whether Cohere arms beat the pins was GH-194 (2026-08-31, two
 published payloads, seed+iterator isolated on raw articles, prose-only
 Pangram):
 
-(Dated 2026-08-31; superseded by the 2026-09-02 drift event — see the
-Calibration data note. The authorship findings stand; the numbers do not.)
+(Dated 2026-08-31; superseded by the 2026-09-01 detector-model switch — see
+the Calibration data note. The authorship findings stand; the numbers do not.)
 
 | arm (seed -> iterator) | loop (base 1.000) | prompts (base 0.913) | mean |
 |---|--:|--:|--:|
@@ -412,8 +412,8 @@ seed-driven, lost the GH-194 head-to-head (mean 0.867 vs 0.768), and a
 gpt-oss pass after a Cohere seed actively undoes the seed (0.896 ->
 0.996) — never mix them in that order. Reach for it when an
 iterator-grind on an already-clean draft is specifically wanted;
-substitute the model names into the commands above. Pangram retrains on
-new model families, so re-measure before reusing any recipe.
+substitute the model names into the commands above. Pangram ships new
+detector versions over time, so re-measure before reusing any recipe.
 
 #### 2.3 Ablation: the unseeded single pass
 
@@ -670,16 +670,22 @@ skipped (short), mean distance, **seed reach**.
 
 ## Calibration data
 
-**Drift event, 2026-09-02.** Pangram retrained and the July/August
-floors below are no longer current: a published-pipeline article that
-passed at 0.2061 mean window on 2026-08-23 scanned 0.9955 UNTOUCHED on
-2026-09-02 (same prose-only framing, payload verified — substack#323).
-The decay this section always warned about arrived at detector scale;
-the laundering fingerprints of the July/August model families appear to
-have entered the mirror set. Every score below is a dated record of a
-dead detector version. Reuse of any recipe re-measures first, and the
-newsletter venue retired its pangram gate in response (paper-stash#85)
-— its posture is the process disclosure, not the race.
+**Detector discontinuity, 2026-09-01.** The July/August floors below
+are not comparable to current scores, for two separate reasons. First, a
+client model switch: until 2026-09-01 `scripts/pangram.py` sent no
+`model`, so the API scored on the `default` alias; commit b6c649a
+(2026-09-01 23:25 -0400) made `pangram-4` the default, and the two
+models disagree on identical text (15.7% vs 64.1% AI). The pair once
+cited here as a retrain — a published-pipeline article at 0.2061 mean
+window on 2026-08-23, then 0.9955 untouched on 2026-09-02 (substack#323)
+— crosses that switch, so it measures the model change, not a vendor
+retrain. Second, a vendor version change, separately established and of
+unknown date: identical prose read 0.445 on `default` 3.3.2 (2026-08-28)
+and 1.000 on 4.1 (2026-11-04). Every score below is a dated record on
+`default`. Reuse of any recipe re-measures first. The newsletter venue
+retired its pangram gate (paper-stash#85); that decision stands — its
+posture is the process disclosure, not the race — only its stated
+reason has changed.
 
 The historical runs below were measured under the pre-GH-208 layout, with
 match-outline as the chain's own first phase; its role is unchanged — it
