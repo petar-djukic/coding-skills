@@ -87,6 +87,10 @@ def reading_copy(article):
     """
     text = open(article).read()
     body = re.sub(r"\A---\n.*?\n---\n", "", text, flags=re.S)
+    # prepare leaves figure syntax inside code as code, so count only the
+    # figures outside it or the tally below refuses a correct copy.
+    for start, end in reversed(prepare_copy.code_regions(body)):
+        body = body[:start] + body[end:]
     alts = re.findall(r"!\[(.*?)\]\(", body, re.S)
     copy = prepare_copy.prepare(text)
     placeholders = copy.count("[figure]")

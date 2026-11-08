@@ -3,7 +3,8 @@
 
 Strips front matter and the REFERENCES tail, collapses figures to [figure],
 marks locked spans as [[LOCKED: ... :LOCKED]] so critics can see what is
-off-limits, and drops other HTML comments. Writes <stem>.critic-copy.md.
+off-limits, and drops other HTML comments. Fenced blocks and inline code
+spans pass through verbatim (GH-413, GH-414). Writes <stem>.critic-copy.md.
 """
 import argparse
 import os
@@ -73,12 +74,85 @@ def collapse_figures(text):
         i = dest_end
 
 
+_CODE_START = re.compile(
+    r"<!--"
+    r"|^[ ]{0,3}(?P<fence>`{3,}(?=[^`\n]*$)|~{3,})"
+    r"|(?P<ticks>`+)",
+    re.M,
+)
+
+
+def code_regions(text):
+    """(start, end) of every fenced block and inline code span, in order.
+
+    A how-to that shows a release tag as code — `<!-- release: 00.0 -->` —
+    lost it to the comment strip, and every critic then reported that the
+    format is never displayed (GH-413, GH-414). Code is content the reader
+    sees verbatim, so none of the reading-copy rewrites may touch it.
+
+    Comments are scanned past whole, so a backtick inside a reverse-outline
+    marker never opens a span that hides the marker from the strip. An
+    unclosed fence runs to the end of the document, as CommonMark has it. An
+    unmatched backtick run is literal text, and its partner is sought only
+    within the paragraph, so one stray backtick cannot shield the rest of the
+    article from the strip.
+    """
+    regions, pos = [], 0
+    while True:
+        m = _CODE_START.search(text, pos)
+        if not m:
+            return regions
+        if m.group(0) == "<!--":
+            close = text.find("-->", m.end())
+            pos = m.end() if close < 0 else close + 3
+        elif m.group("fence"):
+            fence = m.group("fence")
+            line_end = text.find("\n", m.end())
+            if line_end < 0:
+                regions.append((m.start(), len(text)))
+                return regions
+            closing = re.compile(
+                rf"^[ ]{{0,3}}{re.escape(fence[0])}{{{len(fence)},}}[ \t]*$",
+                re.M).search(text, line_end + 1)
+            end = len(text) if not closing else closing.end()
+            regions.append((m.start(), end))
+            pos = end
+        else:
+            ticks = m.group("ticks")
+            para = re.compile(r"\n[ \t]*\n").search(text, m.end())
+            limit = para.start() if para else len(text)
+            closing = re.compile(rf"(?<!`){ticks}(?!`)").search(
+                text, m.end(), limit)
+            if closing:
+                regions.append((m.start(), closing.end()))
+                pos = closing.end()
+            else:
+                pos = m.end()
+
+
+def _shield(text):
+    """Swap code regions for placeholders; returns (text, originals)."""
+    out, kept, pos = [], [], 0
+    for start, end in code_regions(text):
+        out.append(text[pos:start])
+        out.append(f"\x00{len(kept)}\x00")
+        kept.append(text[start:end])
+        pos = end
+    out.append(text[pos:])
+    return "".join(out), kept
+
+
+def _unshield(text, kept):
+    return re.sub(r"\x00(\d+)\x00", lambda m: kept[int(m.group(1))], text)
+
+
 def prepare(text):
     if text.startswith("---\n"):
         parts = text.split("\n---\n", 1)
         if len(parts) == 2:
             text = parts[1]
     text = text.split("\n## REFERENCES")[0]
+    text, kept = _shield(text)
     # Locks first: once converted they carry no `<!--`, so the general strip
     # below cannot reach them. Reordering these three lines deletes the locks.
     text = re.sub(r"<!--\s*lock\s*-->", "[[LOCKED: ", text)
@@ -90,7 +164,8 @@ def prepare(text):
     # would swallow every line between the first comment and the last.
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     text = collapse_figures(text)
-    return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return _unshield(text, kept).strip() + "\n"
 
 
 def main():
