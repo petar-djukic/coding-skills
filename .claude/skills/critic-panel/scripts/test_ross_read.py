@@ -67,6 +67,15 @@ class CopyTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 ross_read.reading_copy(write_article(d, broken))
 
+    def test_figure_syntax_shown_as_code_is_not_counted(self):
+        # GH-414: code reaches the critics verbatim, so an image shown as
+        # code is no figure and must not unbalance the tally.
+        shown = ARTICLE + "\nEmbed one with `![alt](path.svg)`.\n"
+        with tempfile.TemporaryDirectory() as d:
+            copy = ross_read.reading_copy(write_article(d, shown))
+        self.assertIn("`![alt](path.svg)`", copy)
+        self.assertIn("[CHART THE READER SEES: Split by meter: reads 64%.]", copy)
+
 
 class PromptTest(unittest.TestCase):
     def test_prompt_carries_persona_reader_and_every_protocol_clause(self):

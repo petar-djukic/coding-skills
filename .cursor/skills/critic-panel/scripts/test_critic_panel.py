@@ -97,6 +97,63 @@ class PrepareTest(unittest.TestCase):
         self.assertIn("And this one.", out)
 
 
+class CodeIsVerbatimTest(unittest.TestCase):
+    """GH-413, GH-414. A how-to showing a release tag as code lost the tag,
+    and with it the text after it, so every critic reviewed a truncated
+    article and reported that the format is never displayed."""
+
+    TAG = "<!-- release: 00.0 | status: planned -->"
+
+    def test_a_comment_inside_a_fenced_block_survives(self):
+        src = (f"Tag each use case:\n\n```yaml\n{self.TAG}\nid: uc001\n```\n\n"
+               "Then commit.\n")
+        out = prepare_copy.prepare(src)
+        self.assertIn(f"```yaml\n{self.TAG}\nid: uc001\n```", out)
+        self.assertIn("Then commit.", out)
+
+    def test_a_comment_inside_an_inline_span_survives(self):
+        out = prepare_copy.prepare(f"The tag reads `{self.TAG}` in the file.\n")
+        self.assertIn(f"`{self.TAG}`", out)
+
+    def test_a_tilde_fence_and_a_double_backtick_span_survive(self):
+        src = (f"~~~\n{self.TAG}\n~~~\n\nInline: ``a ` {self.TAG}`` here.\n")
+        out = prepare_copy.prepare(src)
+        self.assertIn(f"~~~\n{self.TAG}\n~~~", out)
+        self.assertIn(f"``a ` {self.TAG}``", out)
+
+    def test_locks_figures_and_blank_runs_inside_code_are_untouched(self):
+        body = "<!-- lock -->x<!-- /lock -->\n![alt](f.png)\n\n\n\nend"
+        out = prepare_copy.prepare(f"```\n{body}\n```\n")
+        self.assertIn(body, out)
+        self.assertNotIn("[[LOCKED:", out)
+        self.assertNotIn("[figure]", out)
+
+    def test_comments_outside_code_still_strip(self):
+        src = (f"<!-- rst: nucleus | x -->\nUse `code` here.\n\n"
+               f"```\n{self.TAG}\n```\n\n<!-- rst: joint -> 1 | y -->\nAfter.\n")
+        out = prepare_copy.prepare(src)
+        self.assertNotIn("rst:", out)
+        self.assertIn("`code`", out)
+        self.assertIn(self.TAG, out)
+
+    def test_a_backtick_inside_a_comment_opens_no_span(self):
+        """The marker must still strip; a span opened inside it would hide
+        it from the strip and pair with a backtick in the prose after."""
+        src = "<!-- rst: nucleus | the `x` flag -->\nProse with `y`.\n"
+        self.assertEqual(prepare_copy.prepare(src).strip(), "Prose with `y`.")
+
+    def test_a_stray_backtick_shields_nothing_past_its_paragraph(self):
+        src = ("A stray ` backtick.\n\n<!-- rst: nucleus | gone -->\n"
+               "Later ` prose.\n")
+        out = prepare_copy.prepare(src)
+        self.assertNotIn("gone", out)
+        self.assertIn("Later ` prose.", out)
+
+    def test_an_unclosed_fence_runs_to_the_end(self):
+        out = prepare_copy.prepare(f"Before.\n\n```\n{self.TAG}\n")
+        self.assertIn(self.TAG, out)
+
+
 class FigureCollapseTest(unittest.TestCase):
     """GH-102. Both halves of a markdown image nest, and a character class
     cannot count. `[^)]*` truncated at the first `)`; `[^\\]]*` was worse —
