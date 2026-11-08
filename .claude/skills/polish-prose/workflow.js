@@ -283,6 +283,15 @@ function keepBlock(focusAnswers) {
 
 const rounds = []
 let residue = []
+// Cross-family ross findings left unfixed (GH-439). After round 1 ross only
+// repairs regressions, so a finding already in the text had no route to a
+// fix: in the S2 run the same unglossed terms were reported NOT FIXED in
+// every round. They join the residue the next panel must answer by name,
+// and the final residue, so the report names them either way.
+const rossOpen = (ross, round) => (ross && ross.convergent ? ross.convergent : [])
+  .filter((line) => !/^\s*FIXED\s*:/i.test(line))
+  .map((line) => `ross round ${round}, convergent across families: ${line.replace(/^\s*NOT FIXED:?\s*/i, '')}`)
+let lastRossOpen = []
 // Edits cold review rejected, closed for the rest of the run (GH-438). The
 // S2 run re-proposed, re-applied and re-reverted the same three edits in
 // every round because the next panel never heard about the reverts.
@@ -369,7 +378,7 @@ ${COMMIT(`ross: <slug> (round ${round}${fixRoss ? '' : ', read only'})`)} The bo
 Reserved, never fixed (report them): single-model findings, locked spans, rule tensions, the protected spans below, and any sentence the article's generation notes record as the author's own hand edit.
 Protected spans:
 ${list(pre.protected_spans)}
-Return the legs you ran (model names), every cross-family convergent finding as one line saying whether it was fixed, and the reserved items. ${NO_PROSE} ${HYGIENE}`,
+Return the legs you ran (model names), every cross-family convergent finding as one line that starts with "FIXED:" or "NOT FIXED:", and the reserved items. ${NO_PROSE} ${HYGIENE}`,
     { label: `r${round}: ross read`, phase: 'Review', schema: ROSS })
 
   const voice = VOICE_READY
@@ -380,7 +389,8 @@ Return the legs you ran (model names), every cross-family convergent finding as 
   const diff = await agent(`Did round ${round} change the prose of ${ART}? Run git diff ${outline.round_start_sha} -- ${ART} and count added or removed lines, ignoring lines that are only rst: marker comments or whitespace. Return prose_changed and the count.`,
     { label: `r${round}: diff`, phase: 'Review', schema: DIFF, effort: 'low' })
 
-  residue = [...applied.unapplied_convergent, ...sheet.paragraph_moves]
+  lastRossOpen = rossOpen(ross, round)
+  residue = [...applied.unapplied_convergent, ...sheet.paragraph_moves, ...lastRossOpen]
   rounds.push({
     round,
     words: outline.total_words,
@@ -413,7 +423,7 @@ if (!stable) {
     { label: 'final: copy + length', phase: 'Final read', schema: OUTLINE, effort: 'low' })
   if (o) {
     finalRead = await panel(o, residue, rejected, MAX + 1, 'final')
-    if (finalRead) residue = [...finalRead.convergent.map((c) => `${c.passage} — ${c.why} (x${c.critics})`), ...finalRead.paragraph_moves]
+    if (finalRead) residue = [...finalRead.convergent.map((c) => `${c.passage} — ${c.why} (x${c.critics})`), ...finalRead.paragraph_moves, ...lastRossOpen]
   }
 }
 

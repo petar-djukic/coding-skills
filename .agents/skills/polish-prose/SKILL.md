@@ -135,7 +135,11 @@ was a read of the final text. At the round cap, one read-only panel
 pass runs on the final text, so the report always describes what ships.
 
 The ross read fixes cross-family convergent findings in round 1,
-repairs regressions in round 2, then only reads (the batch cap).
+repairs regressions in round 2, then only reads (the batch cap). Whatever it
+leaves unfixed, it hands on: every cross-family convergent finding still
+marked NOT FIXED joins the next round's residue, so the panel answers for
+it by name, and the run's final residue, so the report names it even
+after the batch cap (GH-439).
 Humanize runs once: re-running the chain on gated prose degraded it in
 measurement (0.621 to 0.579 human, 2026-08-22), and the caller decides
 any further cycle from the seed-reach report.
