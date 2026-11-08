@@ -374,3 +374,14 @@ Pangram column, or an article's generation-block figure measured before
 vendor also changed versions separately (identical prose read 0.445 on
 `default` 3.3.2 on 2026-08-28 and 1.000 on 4.1 on 2026-11-04), so a
 report's version stamp matters as much as its model.
+
+The human side of the venue gates was measured on `pangram-4` 4.1 on
+2026-11-07. Fifteen pre-AI human samples, prose only, each capped at about
+1,500 words, all read 0.000 AI. Twelve were technical-essay and how-to
+exemplars (Dan Luu, Yegge, Martin, Dijkstra, Evans). Three were the
+author's own published papers from 2007 to 2011, the industry-report pool.
+A `max_ai_fraction: 0.5` gate therefore has the full margin on human prose,
+and the venue profiles record that calibration on the gate itself. The
+measurement says nothing about where pipeline output falls, so it supports
+keeping 0.5, not tightening it. The famous essays may also sit in the
+detector's training data; the author's papers are the stronger evidence.
