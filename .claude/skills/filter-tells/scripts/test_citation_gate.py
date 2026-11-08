@@ -65,7 +65,7 @@ def test_damaging_rewrite_is_refused_at_the_splice():
             with open(art, "w") as f:
                 f.write(ARTICLE)
             result = drive.run_rewrite(art, scan, None, "http://unused",
-                                       "test-model", 5, max_passes=1)
+                                       "test-model", 5, max_passes=1, scope="all")
             draft = open(result["draft_path"]).read()
     finally:
         drive.rewrite_passage, drive.run_lexical, drive.run_structural = orig

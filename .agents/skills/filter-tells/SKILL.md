@@ -213,6 +213,18 @@ For each flagged passage (in priority order from Prompt 5):
 5. Constraints: preserve meaning, match author voice, don't introduce new AI patterns
 6. For a `.tex` source: apply the rewrite to the source file in place at the flagged line (the detex prose view is analysis-only, never an edit target). Preserve surrounding `\citep`/`\ref`/comments/math/macros; never reconstruct the file or round-trip through markdown. See "Editing LaTeX sources in place" in the rewrite instructions.
 
+The headless driver (`scripts/drive.py`) does this step for flagged paragraphs only. `--rewrite-scope all` restores the old whole-document pass for a likely-ai verdict. Every candidate goes through a splice gate before it lands (GH-411):
+
+- A model's "Here's the rewritten paragraph:" lead-in is stripped.
+- match-voice's mechanical gate refuses lost or invented citations, numbers, quoted spans, and markup, and a rise in dashes.
+- `critique.mechanical` refuses introduced banned words, a new antithesis or tricolon, and lost protected terms (`<stem>.protected-terms.txt` when present).
+- A critic model judges meaning entailment. A `repair` verdict gets one retry with the critique as constraints, and a `reject` keeps the original. The critic is the rewrite model unless `--critic-model` names another; `--no-critique` gates mechanically only.
+- Canonical-block paragraphs (`writing-voice/canonical-blocks.txt` or `--canonical-blocks`) are never sent.
+
+Refusals are recorded per pass as `gate-refused` errors with their reasons.
+
+On tight post-pipeline drafts the ungated pass leaked prompt diction, invented facts, and deleted canonical lines. Its 2026-08 bake-off winners were measured on raw drafts and have not been re-measured in this regime.
+
 ### Step 5: Recursive Validation
 
 After each rewrite:

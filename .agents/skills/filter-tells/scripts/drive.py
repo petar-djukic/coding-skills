@@ -503,6 +503,69 @@ def rewrite_passage(passage: str, issue_report: str,
     return generate(prompt, endpoint=endpoint, model=model, timeout=timeout)
 
 
+# ---------------------------------------------------------------------------
+# The splice gate (GH-411)
+# ---------------------------------------------------------------------------
+# On tight post-pipeline drafts this pass corrupted meaning with nothing to
+# stop it: Cohere leaked prompt diction ("critical", "key", "seamlessly") and
+# deleted canonical lines, gpt-oss invented a fact ("Anthropic and Vertex AI
+# use the OpenAI-compatible interface of OpenRouter"), and a literal "Here's
+# the rewritten paragraph:" reached the draft. match-voice gated the same
+# payloads cleanly, so this pass now borrows its gates rather than growing a
+# parallel set: verify.verify (citations, numbers, markup, quoted spans,
+# dashes, introduced first person), critique.mechanical (introduced banned
+# words, new antithesis or tricolon, protected-term loss), and, when a critic
+# is supplied, critique's model-judged meaning entailment with one repair.
+
+_SCAFFOLD = re.compile(
+    r"^\s*(?:here'?s|here is|below is|this is)\b[^\n]{0,60}"
+    r"\b(?:rewrit\w*|revis\w*|paragraph|passage|version)\b[^\n]*:\s*$"
+    r"|^\s*(?:rewritten|revised) (?:paragraph|passage|text)\s*:\s*$",
+    re.IGNORECASE | re.MULTILINE)
+
+
+def strip_scaffold(text: str) -> str:
+    """Drop lead-in lines a model emits around the rewrite."""
+    return _SCAFFOLD.sub("", text).strip()
+
+
+def _gate_modules():
+    mv = os.path.normpath(os.path.join(_DIR, "..", "..", "match-voice", "scripts"))
+    if mv not in sys.path:
+        sys.path.insert(0, mv)
+    import critique
+    import protected_terms
+    import verify
+    return verify, critique, protected_terms
+
+
+def gate(original: str, candidate: str, protected: list | None = None,
+         banned: list | None = None, critic=None) -> dict:
+    """Decide one rewrite. Returns {"verdict": accept|repair|reject,
+    "reasons": [...], "critique": {...}}. Mechanical findings are never
+    waived; the critic, when present, can only add findings."""
+    verify, critique, _ = _gate_modules()
+    v = verify.verify(original, candidate, protected_terms=protected or [])
+    fatal = [f["detail"] for f in v["findings"] if f["severity"] == "fatal"]
+    if fatal:
+        return {"verdict": "reject", "reasons": fatal, "critique": None}
+    crit = critique.critique(original, candidate, protected_terms=protected or [],
+                             banned=banned, generate=critic)
+    reasons = []
+    for key in ("banned_words", "quoted_span_changes"):
+        reasons += [f"{key}: {x}" for x in crit.get(key) or []]
+    reasons += [f"term lost: {t['from']}" for t in crit.get("term_swaps") or []]
+    if crit.get("new_antithesis"):
+        reasons.append("staged a contrast the original did not have")
+    if crit.get("new_tricolon"):
+        reasons.append("added a three-item list the original did not have")
+    reasons += [f"meaning: {d}" for d in crit.get("meaning_deltas") or []]
+    if crit.get("register_drift"):
+        reasons.append("register drift")
+    verdict = crit["verdict"] if critic is not None else ("repair" if reasons else "accept")
+    return {"verdict": verdict, "reasons": reasons, "critique": crit}
+
+
 def _rewrite_error_cause(msg: str) -> str:
     """Bucket a rewrite error into a cause, mirroring match-voice's
     classify_rewrite_error so the two skills report failures in the same
@@ -534,8 +597,21 @@ RUN_FATAL_CAUSES = frozenset({"refused-model", "no-api-key", "server-unreachable
 def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
                 endpoint: str, model: str, timeout: int,
                 voice_profile: str | None = None,
-                max_passes: int = 3) -> dict:
-    """Steps 4-5: rewrite flagged passages and validate recursively."""
+                max_passes: int = 3, scope: str = "flagged",
+                critic=None, canonical_blocks: str | None = None) -> dict:
+    """Steps 4-5: rewrite flagged passages and validate recursively.
+
+    scope "flagged" (the default, GH-411) rewrites only paragraphs the scan
+    names; "all" also takes every paragraph of a likely-ai document, the
+    pre-GH-411 behaviour. Every candidate passes gate() before it is
+    spliced; `critic` (prompt -> text) adds the model-judged entailment
+    check and one repair attempt. Canonical-block paragraphs are never
+    sent."""
+    _, critique_mod, pt = _gate_modules()
+    banned = critique_mod.load_banned()
+    canonical_patterns, canonical_path = pt.load_canonical(canonical_blocks, article_path)
+    terms_path = pt.path_for(article_path)
+    protected = pt.read_terms(terms_path) if os.path.exists(terms_path) else []
     with open(article_path) as f:
         original_text = f.read()
 
@@ -551,17 +627,26 @@ def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
     if not paras:
         return {"error": "no paragraphs extracted", "passes": []}
 
-    # Identify which paragraphs to rewrite based on scan issues
-    targets = []
-    for start, end, text in paras:
-        issues = _issues_for_lines(scan, start, end, text)
-        if issues != "(general AI patterns detected)" or \
-                scan.get("verdict") in ("likely-ai", "suspicious",
-                                        "suspicious-overshoot"):
-            targets.append((start, end, text, issues))
+    def pick(paragraphs, scan_now, first_pass):
+        """Targets for a pass, and how many canonical paragraphs were held."""
+        chosen, held = [], 0
+        for start, end, text in paragraphs:
+            if canonical_patterns and pt.is_canonical(text, canonical_patterns):
+                held += 1
+                continue
+            issues = _issues_for_lines(scan_now, start, end, text)
+            flagged = issues != "(general AI patterns detected)"
+            whole_doc = (first_pass and scope == "all" and scan_now.get("verdict") in
+                         ("likely-ai", "suspicious", "suspicious-overshoot"))
+            if flagged or whole_doc:
+                chosen.append((start, end, text, issues))
+        return chosen, held
+
+    targets, canonical_held = pick(paras, scan, True)
 
     if not targets:
-        return {"rewrites": 0, "passes": [],
+        return {"rewrites": 0, "passes": [], "scope": scope,
+                "canonical_held": canonical_held,
                 "message": "no passages targeted for rewrite"}
 
     out_dir = os.path.dirname(os.path.abspath(article_path))
@@ -592,6 +677,7 @@ def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
         # every paragraph (RUN_FATAL_CAUSES) stops the run.
         errors = []
         fatal = None
+        gate_refused = 0
         for start, end, text, issues in reversed(targets):
             try:
                 rewritten = rewrite_passage(text, issues,
@@ -604,12 +690,36 @@ def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
                     fatal = cause
                     break
                 continue
+            rewritten = strip_scaffold(rewritten or "")
             if rewritten and rewritten.strip() != text.strip():
                 damage = _citation_damage(text, rewritten)
                 if damage:
                     # The rewrite is refused, the original paragraph stays.
                     errors.append({"line": start, "cause": "citation-damage",
                                    "error": damage})
+                    continue
+                g = gate(text, rewritten, protected, banned, critic)
+                if g["verdict"] == "repair" and critic is not None:
+                    constraints = critique_mod.render_constraints(g["critique"])
+                    try:
+                        second = strip_scaffold(rewrite_passage(
+                            text, issues + "\nKEEP: " + constraints,
+                            endpoint, model, timeout) or "")
+                    except RuntimeError as e:
+                        second = ""
+                        g["reasons"].append(f"repair failed: {str(e)[:120]}")
+                    if second and second.strip() != text.strip():
+                        g2 = gate(text, second, protected, banned, critic)
+                        if g2["verdict"] == "accept":
+                            rewritten, g = second, g2
+                        else:
+                            g = {**g2, "verdict": "reject"}
+                    else:
+                        g = {**g, "verdict": "reject"}
+                if g["verdict"] != "accept":
+                    errors.append({"line": start, "cause": "gate-refused",
+                                   "error": "; ".join(g["reasons"])[:300]})
+                    gate_refused += 1
                     continue
                 # Expand a multi-line rewrite into multiple list elements, or
                 # current_lines stops being one-line-per-element. reversed()
@@ -629,7 +739,9 @@ def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
 
         pass_record = {
             "pass": pass_num,
+            "targets": len(targets),
             "rewrites_applied": rewrites_applied,
+            "gate_refused": gate_refused,
             "issue_count": new_count,
             "prev_issue_count": prev_issue_count,
             "verdict": val["verdict"],
@@ -655,16 +767,16 @@ def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
             paras = parse_paragraphs(draft_path)
         except RuntimeError:
             break
-        targets = []
-        for start, end, text in paras:
-            issues = _issues_for_lines(val, start, end, text)
-            if issues != "(general AI patterns detected)":
-                targets.append((start, end, text, issues))
+        targets, _ = pick(paras, val, False)
         if not targets:
             break
 
     return {
         "draft_path": draft_path,
+        "scope": scope,
+        "critic": "model" if critic is not None else "mechanical only",
+        "canonical_held": canonical_held,
+        "canonical_blocks": canonical_path,
         "passes": passes,
         "before": {"issue_count": (scan["lexical"]["issue_count"] +
                                    scan["structural"]["issue_count"]),
@@ -696,6 +808,18 @@ def main():
                     help=f"Per-prompt timeout in seconds (default: {DEFAULT_TIMEOUT})")
     ap.add_argument("--no-rewrite", action="store_true",
                     help="Run Steps 1-3, report only, skip rewrite passes")
+    ap.add_argument("--rewrite-scope", choices=["flagged", "all"], default="flagged",
+                    help="flagged (default): rewrite only paragraphs the scan "
+                         "names; all: every paragraph of a likely-ai document "
+                         "(pre-GH-411 behaviour)")
+    ap.add_argument("--critic-model",
+                    help="model for the entailment critique of each rewrite "
+                         "(default: --model)")
+    ap.add_argument("--no-critique", action="store_true",
+                    help="gate rewrites mechanically only; no entailment model call")
+    ap.add_argument("--canonical-blocks", metavar="FILE",
+                    help="canonical-block registry (default: writing-voice/"
+                         "canonical-blocks.txt found walking up)")
     ap.add_argument("--voice-dir",
                     help="Path to writing-voice/ directory (future)")
     ap.add_argument("--lexicon",
@@ -761,10 +885,18 @@ def main():
     # Steps 4-5: targeted rewrite and recursive validation
     rewrite_result = None
     if scan["verdict"] != "clean" and server_ok:
+        critic = None
+        if not args.no_critique:
+            critic_model = args.critic_model or args.model
+
+            def critic(prompt, _m=critic_model):
+                return generate(prompt, endpoint=args.endpoint, model=_m,
+                                timeout=args.timeout)
         rewrite_result = run_rewrite(
             args.article, scan, semantic,
             args.endpoint, args.model, args.timeout,
-            voice_profile=args.voice_profile)
+            voice_profile=args.voice_profile, scope=args.rewrite_scope,
+            critic=critic, canonical_blocks=args.canonical_blocks)
         scan["rewrite"] = rewrite_result
 
     result = scan
