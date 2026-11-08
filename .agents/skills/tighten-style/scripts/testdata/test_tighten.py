@@ -146,6 +146,36 @@ def main():
         assert "sent-floor advisory" in out_txt, (
             "floor warning should appear in output")
 
+        # 8. GH-433: --jobs 1 and --jobs 4 write the same draft. Later
+        #    paragraphs answer first, so a pool that reordered results or
+        #    spliced by completion would show here.
+        import threading, time
+        paras = [WORDY.replace("cache", w) for w in
+                 ("cache", "queue", "index", "ledger", "router", "buffer")]
+        art5 = os.path.join(tmp, "e.md")
+        with open(art5, "w") as f:
+            f.write("# T\n\n" + "\n\n".join(paras) + "\n")
+        seen = []
+        lock = threading.Lock()
+
+        def uneven(prompt, **kw):
+            word = next(w for w in ("cache", "queue", "index", "ledger",
+                                    "router", "buffer") if f"the {w} " in prompt)
+            with lock:
+                seen.append(word)
+            time.sleep({"cache": 0.0, "queue": 0.3, "index": 0.2,
+                        "ledger": 0.1, "router": 0.05, "buffer": 0.0}[word])
+            return f"The {word} can expire entries early because memory is limited."
+        outs = {}
+        for jobs in ("1", "4"):
+            o = os.path.join(tmp, f"o5-{jobs}.md")
+            run_main(["--article", art5, "--out", o, "--jobs", jobs,
+                      "--retries", "0"], uneven)
+            outs[jobs] = open(o).read()
+        assert outs["1"] == outs["4"], "--jobs changed the draft"
+        assert outs["1"].count("because memory is limited.") == 6
+        assert len(seen) == 12, seen
+
         print("test_tighten: all assertions passed (no server)")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

@@ -609,7 +609,8 @@ def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
                 endpoint: str, model: str, timeout: int,
                 voice_profile: str | None = None,
                 max_passes: int = 3, scope: str = "flagged",
-                critic=None, canonical_blocks: str | None = None) -> dict:
+                critic=None, canonical_blocks: str | None = None,
+                jobs: int = 4) -> dict:
     """Steps 4-5: rewrite flagged passages and validate recursively.
 
     scope "flagged" (the default, GH-411) rewrites only paragraphs the scan
@@ -689,54 +690,90 @@ def run_rewrite(article_path: str, scan: dict, semantic: dict | None,
         errors = []
         fatal = None
         gate_refused = 0
-        for start, end, text, issues in reversed(targets):
+
+        def _candidate(target):
+            """One target's gated candidate. Returns ("ok", text),
+            ("error", record, cause), ("refused", record), ("same",), or
+            ("not-attempted",) once a run-fatal cause has stopped the pass."""
+            start, end, text, issues = target
+            if stop.is_set():
+                return ("not-attempted",)
             try:
                 rewritten = rewrite_passage(text, issues,
                                             endpoint, model, timeout)
             except RuntimeError as e:
                 cause = _rewrite_error_cause(str(e))
-                errors.append({"line": start, "cause": cause,
-                               "error": str(e)[:200]})
                 if cause in RUN_FATAL_CAUSES:
-                    fatal = cause
-                    break
-                continue
+                    stop.set()
+                return ("error", {"line": start, "cause": cause,
+                                  "error": str(e)[:200]}, cause)
             rewritten = strip_scaffold(rewritten or "")
-            if rewritten and rewritten.strip() != text.strip():
-                damage = _citation_damage(text, rewritten)
-                if damage:
-                    # The rewrite is refused, the original paragraph stays.
-                    errors.append({"line": start, "cause": "citation-damage",
-                                   "error": damage})
-                    continue
-                g = gate(text, rewritten, protected, banned, critic)
-                if g["verdict"] == "repair" and critic is not None:
-                    constraints = critique_mod.render_constraints(g["critique"])
-                    try:
-                        second = strip_scaffold(rewrite_passage(
-                            text, issues + "\nKEEP: " + constraints,
-                            endpoint, model, timeout) or "")
-                    except RuntimeError as e:
-                        second = ""
-                        g["reasons"].append(f"repair failed: {str(e)[:120]}")
-                    if second and second.strip() != text.strip():
-                        g2 = gate(text, second, protected, banned, critic)
-                        if g2["verdict"] == "accept":
-                            rewritten, g = second, g2
-                        else:
-                            g = {**g2, "verdict": "reject"}
+            if not rewritten or rewritten.strip() == text.strip():
+                return ("same",)
+            damage = _citation_damage(text, rewritten)
+            if damage:
+                # The rewrite is refused, the original paragraph stays.
+                return ("refused", {"line": start, "cause": "citation-damage",
+                                    "error": damage})
+            g = gate(text, rewritten, protected, banned, critic)
+            if g["verdict"] == "repair" and critic is not None:
+                constraints = critique_mod.render_constraints(g["critique"])
+                try:
+                    second = strip_scaffold(rewrite_passage(
+                        text, issues + "\nKEEP: " + constraints,
+                        endpoint, model, timeout) or "")
+                except RuntimeError as e:
+                    second = ""
+                    g["reasons"].append(f"repair failed: {str(e)[:120]}")
+                if second and second.strip() != text.strip():
+                    g2 = gate(text, second, protected, banned, critic)
+                    if g2["verdict"] == "accept":
+                        rewritten, g = second, g2
                     else:
-                        g = {**g, "verdict": "reject"}
-                if g["verdict"] != "accept":
-                    errors.append({"line": start, "cause": "gate-refused",
-                                   "error": "; ".join(g["reasons"])[:300]})
+                        g = {**g2, "verdict": "reject"}
+                else:
+                    g = {**g, "verdict": "reject"}
+            if g["verdict"] != "accept":
+                return ("refused", {"line": start, "cause": "gate-refused",
+                                    "error": "; ".join(g["reasons"])[:300]},
+                        "gate")
+            return ("ok", rewritten)
+
+        # Candidates are independent, so they are computed concurrently
+        # (GH-433); the first runs alone so a run-fatal cause (no key, a
+        # refused model, a dead server) costs one call, as it did when the
+        # loop was sequential. The splice below stays sequential and
+        # bottom-up.
+        import threading
+        stop = threading.Event()
+        order = list(reversed(targets))
+        outcomes = [_candidate(order[0])] if order else []
+        rest = order[1:]
+        if stop.is_set():
+            outcomes += [("not-attempted",)] * len(rest)
+        elif jobs <= 1 or len(rest) <= 1:
+            outcomes += [_candidate(t) for t in rest]
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=jobs) as pool:
+                outcomes += list(pool.map(_candidate, rest))
+
+        for (start, end, text, issues), out in zip(order, outcomes):
+            kind = out[0]
+            if kind == "error":
+                errors.append(out[1])
+                if out[2] in RUN_FATAL_CAUSES and fatal is None:
+                    fatal = out[2]
+            elif kind == "refused":
+                errors.append(out[1])
+                if len(out) > 2:
                     gate_refused += 1
-                    continue
+            elif kind == "ok":
                 # Expand a multi-line rewrite into multiple list elements, or
                 # current_lines stops being one-line-per-element. reversed()
                 # (bottom-up) keeps earlier indices valid even when a rewrite
                 # changes the paragraph's line count.
-                current_lines[start - 1:end] = rewritten.split("\n")
+                current_lines[start - 1:end] = out[1].split("\n")
                 rewrites_applied += 1
 
         with open(draft_path, "w") as f:
@@ -819,6 +856,11 @@ def main():
                     help=f"Per-prompt timeout in seconds (default: {DEFAULT_TIMEOUT})")
     ap.add_argument("--no-rewrite", action="store_true",
                     help="Run Steps 1-3, report only, skip rewrite passes")
+    ap.add_argument("--jobs", type=int,
+                    default=int(os.environ.get("FILTER_TELLS_JOBS", "4")),
+                    help="paragraphs rewritten concurrently (default 4, or "
+                         "FILTER_TELLS_JOBS; 1 = sequential). The draft does "
+                         "not depend on it")
     ap.add_argument("--rewrite-scope", choices=["flagged", "all"], default="flagged",
                     help="flagged (default): rewrite only paragraphs the scan "
                          "names; all: every paragraph of a likely-ai document "
@@ -907,7 +949,8 @@ def main():
             args.article, scan, semantic,
             args.endpoint, args.model, args.timeout,
             voice_profile=args.voice_profile, scope=args.rewrite_scope,
-            critic=critic, canonical_blocks=args.canonical_blocks)
+            critic=critic, canonical_blocks=args.canonical_blocks,
+            jobs=args.jobs)
         scan["rewrite"] = rewrite_result
 
     result = scan

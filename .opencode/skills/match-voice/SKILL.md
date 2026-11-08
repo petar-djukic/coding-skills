@@ -444,6 +444,7 @@ stay verbatim in the draft, and are counted in the manifest.
 | Model | `--model` / `MATCH_VOICE_MODEL` | `cohere:command-a-03-2025` (local fallback `gemma4:12b`) |
 | Temperature | `--temperature` | 0.7 |
 | Timeout (s) | `--timeout` / `MATCH_VOICE_TIMEOUT` | 300 (cold loads are slow) |
+| Concurrent paragraphs | `--jobs` / `MATCH_VOICE_JOBS` | 4; 1 is sequential. Each call still carries one paragraph, and the draft does not depend on it (GH-433) |
 | Anchors per paragraph | `-k` | 3 |
 | Max copied run (words) | `--max-shared-run` | 8 |
 | Standing style directive | `--style-note` | off |
