@@ -199,6 +199,15 @@ sheet a human worked from that day was assembled by hand and nothing recorded
 that the tool had contributed nothing (GH-107). A report parsing to nothing
 now names itself and stops the merge.
 
+Within those names, `converge.py` tolerates how model legs actually write
+(GH-442): bold headings and bold field labels (`## **Findings**`,
+`**Passage:**`) read as plain ones; quote marks or backticks wrapping a
+whole quote are stripped; and two quotes point at one passage when they
+are similar as wholes, when a quote of four or more words sits inside the
+other, or when one is elided with `...` and its pieces occur in order in
+the other. A group is rendered under its fullest unelided quote, since
+critic-apply must find that text verbatim in the article.
+
 A verdict critic with **no findings is not a failure** — that is what `Pass`
 in the Summary block reports. Write `## Findings` with nothing under it.
 

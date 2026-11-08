@@ -685,5 +685,66 @@ class GoldenSheetTest(unittest.TestCase):
             self.assertTrue(r["items"], f"{n} parsed to zero items")
 
 
+class LooseLegFormatTest(unittest.TestCase):
+    """GH-442. Four ways the S2 ross legs' reports failed to merge, each of
+    which cost a hand edit or a rerun."""
+
+    SENT = ("The harness surrounds the LAM and is trained to address gaps in "
+            "what the model can do alone.")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.t = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _conv(self, *paths):
+        groups = converge.group([converge.parse(p) for p in paths])
+        return [g for g in groups if len({i["critic"] for i in g}) > 1]
+
+    def test_wrapped_quotes_are_stripped_and_merge(self):
+        a = _verdict(self.t, "claude", "d", [(self.SENT, "Unglossed.", "Gloss it.")], "v")
+        b = _verdict(self.t, "mistral", "d", [(f'"{self.SENT}"', "Unglossed.", "Gloss.")], "v")
+        c = _verdict(self.t, "gemma", "d", [(f"\u201c{self.SENT}\u201d", "Unglossed.", "Gloss.")], "v")
+        conv = self._conv(a, b, c)
+        self.assertEqual(len(conv), 1)
+        self.assertEqual(len(conv[0]), 3)
+        self.assertEqual(converge.parse(b)["items"][0]["quote"], self.SENT)
+
+    def test_a_short_quote_inside_the_sentence_merges(self):
+        a = _verdict(self.t, "claude", "d", [(self.SENT, "Unglossed.", "Gloss it.")], "v")
+        b = _verdict(self.t, "glm", "d", [("trained to address gaps", "Vague.", "Say which gaps.")], "v")
+        conv = self._conv(a, b)
+        self.assertEqual(len(conv), 1)
+        self.assertEqual(conv[0][0]["quote"], self.SENT, "rendered under the full sentence")
+
+    def test_an_elided_quote_merges_and_is_not_the_representative(self):
+        a = _verdict(self.t, "claude", "d", [(self.SENT, "Unglossed.", "Gloss it.")], "v")
+        b = _verdict(self.t, "gptoss", "d", [("The harness surrounds the LAM ... what the model can do alone.", "Unglossed.", "Gloss.")], "v")
+        c = _verdict(self.t, "kimi", "d", [("The harness surrounds the LAM \u2026 can do alone.", "Unglossed.", "Gloss.")], "v")
+        conv = self._conv(b, c, a)
+        self.assertEqual(len(conv), 1)
+        self.assertEqual(len(conv[0]), 3)
+        self.assertEqual(conv[0][0]["quote"], self.SENT)
+
+    def test_bold_headings_and_labels_parse(self):
+        path = os.path.join(self.t, "gptoss.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("## **Diagnosis**\nd\n\n## **Findings**\n### 1\n"
+                    f"**Passage:** {self.SENT}\n**Finding:** Unglossed.\n**Fix**: Gloss it.\n\n"
+                    "## **Verdict**\nv\n")
+        r = converge.parse(path)
+        self.assertIsNone(converge.unparseable(r))
+        self.assertEqual(r["kind"], "verdict")
+        self.assertEqual(r["items"][0]["quote"], self.SENT)
+        self.assertEqual(r["items"][0]["Fix"], "Gloss it.")
+
+    def test_unrelated_passages_stay_apart(self):
+        a = _verdict(self.t, "claude", "d", [(self.SENT, "Unglossed.", "Gloss it.")], "v")
+        b = _verdict(self.t, "glm", "d", [("The operators read the dashboard every morning.", "Flat.", "Cut.")], "v")
+        self.assertEqual(self._conv(a, b), [])
+
+
 if __name__ == "__main__":
     unittest.main()
