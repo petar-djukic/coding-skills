@@ -269,6 +269,52 @@ def test_end_to_end_manifest_survives_a_run_that_rewrote_nothing():
         assert m["anchor_files"], "anchors were selected and must be recorded"
 
 
+class OrderStub(DispatchStub):
+    """Rewrites each paragraph distinctly, with later paragraphs answering
+    first, so a pool that reordered results would show in the draft."""
+
+    def __call__(self, cmd, **kw):
+        if any("rewrite.py" in c for c in cmd) and "--text" in cmd:
+            import time
+            with open(cmd[cmd.index("--text") + 1], encoding="utf-8") as f:
+                txt = f.read().strip()
+            n = int(os.path.basename(cmd[cmd.index("--text") + 1])[1:3])
+            time.sleep(max(0.0, 0.05 * (6 - n)))
+            self.calls.append(cmd)
+            return self.R(0, txt.replace("the", "the", 1) + f" Rewritten {n}.")
+        return super().__call__(cmd, **kw)
+
+
+def test_jobs_do_not_change_the_draft():
+    """GH-433: paragraph rewrites run concurrently; the draft is the same."""
+    sys.path.insert(0, HERE)
+    import test_anchor_reporting as T
+    drafts = {}
+    for jobs in ("1", "4"):
+        with tempfile.TemporaryDirectory() as tmp:
+            T.build_corpus(tmp)
+            art = os.path.join(tmp, "article.md")
+            body = "\n\n".join([T.DRAFT, T.ESSAY, T.DRAFT.replace("the", "a", 1),
+                                  T.ESSAY.replace("the", "a", 1)])
+            open(art, "w").write("---\ntitle: T\n---\n\n# H\n\n" + body + "\n")
+            stub = OrderStub()
+            orig_run, saved_argv = drive.run, sys.argv
+            drive.run = stub
+            sys.argv = ["drive.py", "--article", art, "--retries", "0",
+                        "--no-critique", "--no-anchors", "--jobs", jobs]
+            try:
+                with open(os.devnull, "w") as dn:
+                    import contextlib
+                    with contextlib.redirect_stdout(dn):
+                        drive.main()
+            finally:
+                drive.run, sys.argv = orig_run, saved_argv
+            drafts[jobs] = open(os.path.join(tmp, "article.vr-draft.md")).read()
+    assert drafts["1"] == drafts["4"], "--jobs changed the draft"
+    assert all(f"Rewritten {n}." in drafts["1"] for n in (1, 2, 3, 4)), drafts["1"]
+    print("  jobs_do_not_change_the_draft: ok")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

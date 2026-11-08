@@ -212,6 +212,11 @@ def main():
                                                          "http://localhost:11434"))
     ap.add_argument("--out", help="default: <article>.tight.md")
     ap.add_argument("--retries", type=int, default=1)
+    ap.add_argument("--jobs", type=int,
+                    default=int(os.environ.get("TIGHTEN_STYLE_JOBS", "4")),
+                    help="paragraphs tightened concurrently (default 4, or "
+                         "TIGHTEN_STYLE_JOBS; 1 = sequential). The draft does "
+                         "not depend on it")
     ap.add_argument("--min-words", type=int, default=12)
     ap.add_argument("--temperature", default="0.4")
     ap.add_argument("--timeout", type=int,
@@ -331,23 +336,32 @@ def main():
     if a.pangram:
         pangram_before = pangram_scan(art, work, "before")
 
-    results, out_lines = [], list(parsed.lines)
-    for n, (start, end, txt) in enumerate(parsed.paragraphs, 1):
+    out_lines = list(parsed.lines)
+    import threading
+    stop = threading.Event()
+
+    # Paragraphs are independent until write_draft, so their model calls run
+    # concurrently (GH-433). A transport failure means the server is gone:
+    # it sets `stop`, and paragraphs that have not started keep their
+    # originals, as the sequential loop did by breaking out.
+    def _one(item):
+        n, (start, end, txt) = item
         rec = {"n": n, "lines": [start, end], "words": len(txt.split()),
                "rules": sorted(by_para.get(start, []))}
         if rec["words"] < a.min_words:
             rec["status"] = "skipped-short"
-            results.append(rec)
-            continue
+            return rec
         if n in exclude:
             rec["status"] = "excluded-key"
-            results.append(rec)
-            continue
+            return rec
+        if stop.is_set():
+            rec["status"] = "kept-original"
+            rec["rules"] = []
+            return rec
         pf = os.path.join(work, f"p{n:02d}.orig.txt")
         with open(pf, "w") as f:
             f.write(txt)
         status = "kept-original"
-        aborted = False
         for attempt in range(1 + a.retries):
             try:
                 cand = tighten_paragraph(txt, rec["rules"], a.model,
@@ -358,12 +372,10 @@ def main():
                 # originals, and nothing falls back to a drafting-model
                 # rewrite.
                 print(f"p{n:02d}: {e}", file=sys.stderr)
-                for m, (s2, e2, t2) in enumerate(parsed.paragraphs[n:], n + 1):
-                    results.append({"n": m, "lines": [s2, e2],
-                                    "words": len(t2.split()),
-                                    "status": "kept-original", "rules": []})
-                aborted = True
-                break
+                stop.set()
+                rec["status"] = "kept-original"
+                rec["rules"] = []
+                return rec
             if not cand or not cand.strip():
                 break
             import verify as _vmod
@@ -389,9 +401,22 @@ def main():
                 status = "tightened"
                 break
         rec["status"] = status
-        results.append(rec)
-        if aborted:
-            break
+        return rec
+
+    items = list(enumerate(parsed.paragraphs, 1))
+    # The first paragraph that calls the model runs alone: a dead server
+    # then costs one call, not one per worker.
+    probe = next((i for i, (n, (_s, _e, t)) in enumerate(items)
+                  if len(t.split()) >= a.min_words and n not in exclude),
+                 len(items) - 1)
+    results = [_one(it) for it in items[:probe + 1]]
+    rest = items[probe + 1:]
+    if a.jobs <= 1 or len(rest) <= 1:
+        results += [_one(it) for it in rest]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=a.jobs) as pool:
+            results += list(pool.map(_one, rest))
 
     tightened = [r for r in results if r.get("cand")]
     locked = doc.locked_spans()      # read before write_draft mutates doc

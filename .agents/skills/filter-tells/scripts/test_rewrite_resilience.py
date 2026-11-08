@@ -29,7 +29,7 @@ def _scan():
             "verdict": "likely-ai", "needs_step3": True}
 
 
-def _run(rewrite_fn, max_passes=1):
+def _run(rewrite_fn, max_passes=1, jobs=4):
     orig_rewrite, orig_lex, orig_struct = (
         drive.rewrite_passage, drive.run_lexical, drive.run_structural)
     drive.rewrite_passage = rewrite_fn
@@ -41,7 +41,8 @@ def _run(rewrite_fn, max_passes=1):
             with open(art, "w") as f:
                 f.write(ARTICLE)
             result = drive.run_rewrite(art, _scan(), None, "http://unused",
-                                       "test-model", 5, max_passes=max_passes, scope="all")
+                                       "test-model", 5, max_passes=max_passes, scope="all",
+                                       jobs=jobs)
             draft = open(result["draft_path"]).read() if "draft_path" in result else ""
             return result, draft
     finally:
@@ -97,7 +98,25 @@ def test_per_paragraph_errors_are_each_recorded():
     print("  per_paragraph_errors_are_each_recorded: ok")
 
 
+def test_jobs_do_not_change_the_draft():
+    """GH-433: candidates are computed concurrently, spliced in order."""
+    import time
+
+    def uneven(text, issues, endpoint, model, timeout):
+        tag = text.split("marker-")[1].split()[0]
+        time.sleep({"one": 0.2, "two": 0.0, "three": 0.1, "four": 0.05}[tag])
+        return text.replace("marker", "REWRITTEN")
+
+    r1, d1 = _run(uneven, jobs=1)
+    r4, d4 = _run(uneven, jobs=4)
+    assert d1 == d4, "--jobs changed the draft"
+    assert d1.count("REWRITTEN-") == 4, d1
+    assert r1["passes"][-1]["rewrites_applied"] == r4["passes"][-1]["rewrites_applied"] == 4
+    print("  jobs_do_not_change_the_draft: ok")
+
+
 def main():
+    test_jobs_do_not_change_the_draft()
     test_one_failure_does_not_abandon_the_pass()
     test_fatal_cause_stops_the_run()
     test_per_paragraph_errors_are_each_recorded()

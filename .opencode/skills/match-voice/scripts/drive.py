@@ -852,6 +852,15 @@ def assemble_draft(art, lines, accept, rng, out):
     return refused
 
 
+def run_paragraphs(fn, items, jobs):
+    """fn over items, in item order, on up to `jobs` threads (GH-433)."""
+    if not jobs or jobs <= 1 or len(items) <= 1:
+        return [fn(it) for it in items]
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        return list(pool.map(fn, items))
+
+
 def parse_paragraphs(path, min_words):
     """Return (lines, fm_close, paragraphs, coverage, unaccounted, doc).
 
@@ -873,6 +882,11 @@ def main():
     ap.add_argument("--out", help="draft path (default: <stem>.vr-draft<ext> "
                                   "beside the article)")
     ap.add_argument("--retries", type=int, default=2)
+    ap.add_argument("--jobs", type=int,
+                    default=int(os.environ.get("MATCH_VOICE_JOBS", "4")),
+                    help="paragraphs rewritten concurrently (default 4, or "
+                         "MATCH_VOICE_JOBS; 1 = sequential). The draft does "
+                         "not depend on it")
     ap.add_argument("--min-words", type=int, default=12)
     ap.add_argument("--temperature", default="0.7")
     ap.add_argument("--style-note", default="",
@@ -1109,17 +1123,21 @@ def main():
     protected_terms_list = (_protected_terms_module().read_terms(protected_path)
                             if protected_path else [])
 
-    results = []
-    for n, (s, e, txt) in enumerate(paras, 1):
+    # Paragraphs are independent until assembly, so their model calls run
+    # concurrently (GH-433: a 1,550-word section took 9.5 hours one call
+    # at a time). Each call still carries one paragraph; results keep
+    # paragraph order, so --jobs never changes the draft.
+    def _one(item):
+        n, (s, e, txt) = item
         rec = {"n": n, "lines": [s, e], "words": len(txt.split()), "orig": txt}
         if n in canonical:
-            rec["status"] = "canonical"; results.append(rec); continue
+            rec["status"] = "canonical"; return rec
         if rec["words"] < a.min_words:
-            rec["status"] = "skipped-short"; results.append(rec); continue
+            rec["status"] = "skipped-short"; return rec
         if selection is not None and n not in selection:
-            rec["status"] = "unselected"; results.append(rec); continue
+            rec["status"] = "unselected"; return rec
         if n in exclude:
-            rec["status"] = "excluded-key"; results.append(rec); continue
+            rec["status"] = "excluded-key"; return rec
         pf = f"{work}/p{n:02d}.orig.txt"; open(pf, "w").write(txt)
         if a.no_anchors:
             ajf = f"{work}/p{n:02d}.anchors.json"; open(ajf, "w").write("[]")
@@ -1251,7 +1269,9 @@ def main():
             rec["status"] = "kept-original"
             rec["last_fail"] = {"verify": json.loads(fj) if fj != "{}" else vf.stdout[:150],
                                 "deai": de.returncode}
-        results.append(rec)
+        return rec
+
+    results = run_paragraphs(_one, list(enumerate(paras, 1)), a.jobs)
 
     # assemble
     accept = {r["n"]: r["cand"] for r in results if r.get("cand")}
