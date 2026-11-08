@@ -347,6 +347,18 @@ reader cannot infer (a number, a citation, a named rule such as
 R-MACH-015, the only statement of a scope condition, a fact), it is
 content written in reasoning's grammar, and it stays.
 
+**The caller's keep list wins**: when the run supplies a focus brief, the
+draft's own rules (an SRD, a constitution), or the panel's focus answers,
+read them before sweeping. A clause one of them names as carrying the
+argument is not a warrant tail, whatever its grammar: a closing `so ...`
+that states what a feature buys, a consequence an SRD requirement
+demands, a closer that carries a statement id (`R1.2`, `AC3`). Do not
+suggest cutting it. On a reliability paper both legs once cut "so
+declared and actual traffic cannot diverge" while the focus brief named
+exactly that kind of clause as the argument to keep (GH-416); the removal
+test asks what the reader can infer, and the brief is the author saying
+what the reader must be told.
+
 **Constraints beyond the shared ones**: never add a word. `Replacement:`
 is `CUT` when `Original:` quotes the tail alone, or the quoted sentence
 with words removed and none added; quote enough of the tail that it occurs

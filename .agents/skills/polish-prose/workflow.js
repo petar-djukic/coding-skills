@@ -232,6 +232,36 @@ From the sheet and the reports return: every convergent passage (2+ critics) wit
     { label: `${tag} r${round}: converge`, phase: tag === 'final' ? 'Final read' : 'Review', schema: SHEET, effort: 'low' })
 }
 
+// Cold review of a candidate against the article as committed at baseline.
+// critic-apply's output and the Iceberg pass's both go through it, so a
+// deletion that leaves a fragment or drops a statement id is reverted
+// instead of committed (GH-416).
+function coldReview(candidatePath, baselineSha, round, commitSubject, label) {
+  return agent(`Cold review, fresh context. You have not seen how the candidate was produced and must not ask.
+
+Read ${SK}/cold-review/SKILL.md and its prompt template ${SK}/cold-review/references/review-prompt.md. Baseline: ${ART} as committed at ${baselineSha} (extract it with git show to a temporary file). Candidate: ${candidatePath}. Run the skill's screen, review paragraph by paragraph as the template specifies, and decide with its closed vocabulary.
+
+- ship as-is: replace ${ART} with the candidate.
+- ship with reverts: run the skill's apply with your revert list and write the result over ${ART}.
+- reject candidate: leave ${ART} untouched.
+High-value targets: numbers, citations, quotations, statement ids (R1.2, AC3), sentences left as fragments, and these protected spans:
+${list(pre.protected_spans)}
+If ${ART} changed, commit it as "${commitSubject}". Return the verdict, each revert as one line, and HEAD. ${HYGIENE}`,
+    { label, phase: 'Review', schema: COLD })
+}
+
+// What outranks the Iceberg removal test: the caller's focus list, the
+// draft's own rules, and this round's panel answers to the focus list.
+function keepBlock(focusAnswers) {
+  const parts = []
+  if (pre.focus_items.length) parts.push(`The caller's focus list:\n${list(pre.focus_items)}`)
+  if (pre.draft_rules.length) parts.push(`The draft's own rules (read each file):\n${list(pre.draft_rules)}`)
+  if (focusAnswers && focusAnswers.length) parts.push(`The panel's answers to the focus list this round, including the clauses it said to keep:\n${list(focusAnswers)}`)
+  return parts.length
+    ? `KEEP LIST. These outrank the removal test. A clause a focus item, a rule, or the panel's answers name as carrying the argument (a consequence that states what a feature buys, an SRD-required consequence, a closer with a statement id such as R1.2 or AC3) is not a warrant tail: do not suggest cutting it, whatever its grammar.\n${parts.join('\n\n')}`
+    : ''
+}
+
 const rounds = []
 let residue = []
 let stable = false
@@ -265,17 +295,8 @@ Then delete the three critic reports and the sheet (the counts you return are th
 
   let cold = { verdict: 'ship as-is', reverts: [], committed_sha: outline.round_start_sha }
   if (applied.applied > 0) {
-    cold = await agent(`Cold review, fresh context. You have not seen how the candidate was produced and must not ask.
-
-Read ${SK}/cold-review/SKILL.md and its prompt template ${SK}/cold-review/references/review-prompt.md. Baseline: ${ART} as committed at ${outline.round_start_sha} (extract it with git show to a temporary file). Candidate: ${applied.candidate_path}. Run the skill's screen, review paragraph by paragraph as the template specifies, and decide with its closed vocabulary.
-
-- ship as-is: replace ${ART} with the candidate.
-- ship with reverts: run the skill's apply with your revert list and write the result over ${ART}.
-- reject candidate: leave ${ART} untouched.
-High-value targets: numbers, citations, quotations, and these protected spans:
-${list(pre.protected_spans)}
-If ${ART} changed, commit it as "critic-apply: <slug> (round ${round}, cold-reviewed)". Return the verdict, each revert as one line, and HEAD. ${HYGIENE}`,
-      { label: `r${round}: cold review`, phase: 'Review', schema: COLD })
+    cold = await coldReview(applied.candidate_path, outline.round_start_sha, round,
+      `critic-apply: <slug> (round ${round}, cold-reviewed)`, `r${round}: cold review`)
     if (!cold) return { status: 'failed', stage: `round ${round} cold review`, rounds }
   }
 
@@ -283,14 +304,24 @@ If ${ART} changed, commit it as "critic-apply: <slug> (round ${round}, cold-revi
   const icebergLegs = await parallel(['a', 'b'].map((leg) => () => agent(`You are the Iceberg critic, leg ${leg}, in a critic-panel read of ${ART}. Fresh context by design: do not look for any other critic's report.
 
 Read your persona brief, the "## Iceberg — The Inference Test" entry in ${SK}/critic-panel/references/personas.md, and "## Category 16: Warrant Tails" in ${SK}/filter-tells/references/cot-leakage-patterns.md; from ${SK}/critic-panel/SKILL.md read "The two report formats" (suggest format, literal headings) and "Constraints". Build your own reading copy of ${ART} as it stands now with ${SK}/critic-panel/scripts/prepare_copy.py, and sweep all of it: return every warrant tail that passes the removal test, with no cap. Replacement is CUT or the quoted span with words removed and none added.
+${keepBlock(sheet.focus_answers)}
 
 Write the report to ${STEM}.critic-iceberg-${leg}.md, delete your reading copy, and return only: done, N suggestions.`,
     { label: `r${round}: iceberg ${leg}`, phase: 'Review' })))
-  const iceberg = await agent(`Apply the Iceberg pass to ${ART}. Merge ${STEM}.critic-iceberg-a.md and ${STEM}.critic-iceberg-b.md with ${SK}/critic-panel/scripts/converge.py --roster iceberg-a,iceberg-b --out ${STEM}.iceberg-sheet.md, then run the critic-apply skill (${SK}/critic-apply/SKILL.md) on that sheet with these protected spans:
+  const icebergKeep = keepBlock(sheet.focus_answers)
+  const iceberg = await agent(`Apply the Iceberg pass to ${ART}. Merge ${STEM}.critic-iceberg-a.md and ${STEM}.critic-iceberg-b.md with ${SK}/critic-panel/scripts/converge.py --roster iceberg-a,iceberg-b --out ${STEM}.iceberg-sheet.md.
+${icebergKeep ? `Before applying, check every convergent cut against the keep list below. A cut that removes a clause the keep list names, or that removes a statement id (R1.2, AC3), is reported, not applied: delete it from the sheet and list it among the unapplied targets with the reason "kept: <the focus item, rule, or panel answer>".
+${icebergKeep}
+` : ''}Then run the critic-apply skill (${SK}/critic-apply/SKILL.md) on the sheet with these protected spans:
 ${list(pre.protected_spans)}
-Convergent cuts and deletion-only trims apply directly with no model call; report any target that could not be placed (for example a span inside a list item, which critic-apply does not locate) instead of placing it by hand. Write the result over ${ART}, commit it as "iceberg: <slug> (round ${round})" if it changed, and return the applied/kept/declined counts and every convergent target left unapplied. ${HYGIENE}`,
+Convergent cuts and deletion-only trims apply directly with no model call; report any target that could not be placed (for example a span inside a list item, which critic-apply does not locate) instead of placing it by hand. Do NOT overwrite the article: leave the candidate at the skill's output path and return that path, the applied/kept/declined counts, and every convergent target left unapplied (first words plus the reason). ${HYGIENE}`,
     { label: `r${round}: iceberg apply`, phase: 'Review', schema: APPLY, effort: 'low' })
-  log(`round ${round}: iceberg legs ${icebergLegs.filter(Boolean).length}/2, ${iceberg ? iceberg.applied : 0} warrant tails removed`)
+  let icebergCold = null
+  if (iceberg && iceberg.applied > 0) {
+    icebergCold = await coldReview(iceberg.candidate_path, cold.committed_sha, round,
+      `iceberg: <slug> (round ${round}, cold-reviewed)`, `r${round}: iceberg cold review`)
+  }
+  log(`round ${round}: iceberg legs ${icebergLegs.filter(Boolean).length}/2, ${iceberg ? iceberg.applied : 0} warrant tails cut in the candidate, cold review ${icebergCold ? icebergCold.verdict : 'not run'}`)
 
   const fixRoss = round <= ROSS_FIX_ROUNDS
   const ross = await agent(`ross read (critic-panel Mode C) on ${ART}, round ${round}. Read the Mode C section of ${SK}/critic-panel/SKILL.md and follow its protocol exactly.
@@ -327,7 +358,7 @@ Return the legs you ran (model names), every cross-family convergent finding as 
     declined: applied.declined,
     cold: cold.verdict,
     reverts: cold.reverts.length,
-    iceberg: iceberg ? { applied: iceberg.applied, unapplied: iceberg.unapplied_convergent } : 'failed',
+    iceberg: iceberg ? { applied: iceberg.applied, unapplied: iceberg.unapplied_convergent, cold: icebergCold ? icebergCold.verdict : 'not run', reverts: icebergCold ? icebergCold.reverts.length : 0 } : 'failed',
     ross: ross ? { legs: ross.legs, convergent: ross.convergent, reserved: ross.reserved } : 'failed',
     voice: voice || 'failed',
     prose_changed: diff ? diff.prose_changed : true,
