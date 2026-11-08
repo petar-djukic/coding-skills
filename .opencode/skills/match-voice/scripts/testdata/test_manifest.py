@@ -194,7 +194,10 @@ class DispatchStub:
         return self.R(0, "")            # detect-lexical.sh
 
     def ran(self, name):
-        return any(name in " ".join(c) for c in self.calls)
+        # Match program and script basenames, not the joined command line: a
+        # checkout path such as ../gh-409-ollama-think-setting contains
+        # "ollama", and a substring test reported a model call that never ran.
+        return any(name == os.path.basename(arg) for c in self.calls for arg in c)
 
 
 def test_end_to_end_writes_the_manifest_beside_the_draft():
