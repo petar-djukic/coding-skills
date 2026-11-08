@@ -71,7 +71,7 @@ Covered today:
 | Tell | Instrument | Reference |
 |---|---|---|
 | Reader-psychology / invented discourse ("answer the objection every operator raises") | lex (`reader-directive`) + P8b | banned-patterns: Reader-Psychology (GH-135) |
-| Self-referential meta-narration ("stated here and cited by every section") | lex (`meta-narration`) + P8b | banned-patterns: Meta-Narration (GH-135) |
+| Self-referential meta-narration ("stated here and cited by every section") | lex (`meta-narration`; self-description and brief-echo phrases as the lower-priority `meta-narration-loose`, GH-408) + P8b | banned-patterns: Meta-Narration (GH-135) |
 | Quantity mismatch (evidence shape, narrow) | P8c | — |
 | Any unnamed pragmatic deviation | str (`--voice-profile`, coarse cross-level) | GH-121 |
 

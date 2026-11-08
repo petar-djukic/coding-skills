@@ -219,6 +219,18 @@ def _filter_hits(candidates: list, category: str) -> str:
                      for h in hits[:15])
 
 
+def _meta_narration_hits(candidates: list) -> str:
+    """The tight meta-narration hits, then the loose ones labelled as lower
+    priority (GH-408): the loose patterns fire on human prose about as often
+    as on AI prose, so the prompt must not weigh them alike."""
+    tight = _filter_hits(candidates, "meta-narration")
+    loose = _filter_hits(candidates, "meta-narration-loose")
+    if loose == "(none)":
+        return tight
+    return (tight + "\n  Lower priority (these patterns fire on human prose "
+            "as often as on AI prose; flag only on the addressee test):\n" + loose)
+
+
 def run_semantic(article_text: str, scan: dict, prompts: dict,
                  endpoint: str, model: str, timeout: int) -> dict:
     """Run Step 3 prompts in the order specified by SKILL.md/prompt-catalog."""
@@ -289,8 +301,7 @@ def run_semantic(article_text: str, scan: dict, prompts: dict,
             lex.get("candidates", []), "editorializing"),
         "reader_directive_hits": _filter_hits(
             lex.get("candidates", []), "reader-directive"),
-        "meta_narration_hits": _filter_hits(
-            lex.get("candidates", []), "meta-narration"),
+        "meta_narration_hits": _meta_narration_hits(lex.get("candidates", [])),
     })
 
     # Prompt 9: paragraph schema (seeded by structural metrics)

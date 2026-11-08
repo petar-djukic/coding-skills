@@ -403,12 +403,19 @@ configuration, and this article shows what that takes." (author: "CoT", cut).
 Two tells stack in that clause. "This article shows" narrates the document;
 "what that takes" promises a payoff and never states it. Delete the clause and
 let the next sentences show what it takes; if they don't, the clause was
-hiding the gap. Caught as `meta-narration` candidates: "this
-(article|paper|section) shows / presents / explains / argues / demonstrates…"
-and "shows / explains what that takes / means / requires / looks like". The
-newsletter bridge sentence ("...and this article introduces it") remains a
-sanctioned exception, which is why these are candidates for the semantic pass
-and not a gate.
+hiding the gap. Caught as candidates: "shows / explains what that takes /
+means / requires / looks like" under `meta-narration`, and "this
+(article|paper|section) shows / presents / explains / argues /
+demonstrates…" under `meta-narration-loose`, the lower-priority bucket. The
+second is how an abstract opens, and it fired on 6 of 27 human samples
+against 4 of 49 AI ones (GH-408). The newsletter bridge sentence ("...and
+this article introduces it") remains a sanctioned exception, which is why
+these are candidates for the semantic pass and not a gate.
+
+The brief-echo phrases ("on purpose", "by design", "for readability", "a
+reader who", "does not specify", "is deliberately") are `meta-narration-loose`
+for the same reason: ordinary English about a subject far more often than an
+echo of the brief. Read them after the tight hits, with the addressee test.
 
 ## Quoted Examples (false-positive handling)
 

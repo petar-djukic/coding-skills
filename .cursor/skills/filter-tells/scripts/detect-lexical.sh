@@ -748,12 +748,6 @@ META_NARRATION=(
   # about the system ("a human approves it before it exists"), not the author.
   'here (we|i|they) (deal|turn|cover|matter)'
   'this (article|piece|section) (covers|delivers|provides|is about)'
-  # Self-description of the document's job (GH-256, roles-and-teams GH-808):
-  # 'and this article shows what that takes' -- the artifact narrating what
-  # it does instead of doing it. Paper venues treat it as CoT. The newsletter
-  # bridge sentence ('...and this article introduces it') stays a sanctioned
-  # exception for the semantic pass, which is why this is a candidate, not a gate.
-  'this (article|paper|piece|essay|section|chapter) (shows|presents|explains|describes|argues|demonstrates|examines|explores|sets out|walks through|lays out)'
   # Empty promise: names a payoff without stating it ('shows what that takes').
   # The reader is told an answer exists and is never given it.
   '(shows?|explains?|describes?|sets out|spells out) what (that|it|this) (takes|means|requires|looks like|involves|entails)'
@@ -762,6 +756,26 @@ META_NARRATION=(
   '(waiting )?for my (approval|review|sign-off)'
   'i walk through'
   'the other half of this'
+)
+
+
+# --- Category: loose meta-narration, lower priority (GH-408) ---
+# Split out of META_NARRATION because these fire on human prose as often as
+# on AI prose, or more. Measured with eval/run_eval.py's corpus discovery on
+# autogenic-systems (27 author-voice exemplars, 49 designated AI documents):
+# the combined category fired on 10/27 human against 9/49 AI, an inverted
+# signal, and the self-description pattern alone on 6/27 against 4/49 —
+# "This paper presents..." is how an abstract opens. Volume like that trains
+# a reviewer to skip the whole category, so the tight patterns above keep the
+# meta-narration name and these report as meta-narration-loose: still
+# candidates for the semantic pass, read after the rest.
+META_NARRATION_LOOSE=(
+  # Self-description of the document's job (GH-256, roles-and-teams GH-808):
+  # 'and this article shows what that takes' -- the artifact narrating what
+  # it does instead of doing it. Paper venues treat it as CoT. The newsletter
+  # bridge sentence ('...and this article introduces it') stays a sanctioned
+  # exception for the semantic pass, which is why this is a candidate, not a gate.
+  'this (article|paper|piece|essay|section|chapter) (shows|presents|explains|describes|argues|demonstrates|examines|explores|sets out|walks through|lays out)'
   # Brief echo (GH-30, CoT Category 15): the writing brief restated as a
   # finding. Two of the seven sub-forms are lexical enough to be worth
   # candidates — the negative-scope restatement of a constraint, and an intent
@@ -790,7 +804,7 @@ META_NARRATION=(
 # script has always carried. Core categories are venue-independent and never
 # change: chat residue, AI clichés, mechanical transitions, narrative pivots,
 # marketing jargon, ornate register, conversational filler, CoT candidates,
-# editorializing, reader-directive, meta-narration.
+# editorializing, reader-directive, meta-narration, meta-narration-loose.
 #
 # Venue-keyed categories:
 #   BANNED_WORDS    the newsletter register list ("critical", "fundamental",
@@ -1176,6 +1190,12 @@ run_on_file() {
     echo "--- Self-Referential Meta-Narration (verify in semantic pass) ---"
   fi
   scan_candidates "meta-narration" "${META_NARRATION[@]}"
+
+  if [[ "$JSON_MODE" != "--json" ]]; then
+    echo ""
+    echo "--- Loose Meta-Narration (lower priority: fires on human prose too) ---"
+  fi
+  scan_candidates "meta-narration-loose" "${META_NARRATION_LOOSE[@]}"
 
   if [[ "$JSON_MODE" == "--json" ]]; then
     echo "["
