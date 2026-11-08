@@ -335,7 +335,7 @@ for a file the user had not thought about yet. An upload cannot be taken back.
 The one exception is a deliberate, recorded, revocable grant: the operator
 writes `consent: standing` into `writing-voice/pangram-consent.yaml` (or
 sets `PANGRAM_CONSENT=standing`; `PANGRAM_CONSENT=off` revokes for a
-session and wins over the file). Under the grant the drivers score by
+session and wins over the file and over an explicit `--pangram`). Under the grant the drivers score by
 default — the GH-194 recipe needs every pass scored — and `--no-pangram`
 opts any single run out. The grant covers the repository the file sits in,
 never other repositories; the retention warning above is what the operator

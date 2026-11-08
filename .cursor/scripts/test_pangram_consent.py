@@ -92,10 +92,32 @@ def test_should_score_table():
         # a venue WITH the gate defers to the grant/flags
         score, _ = pangram.should_score(start_path=art, venue_gates=["pangram"])
         assert score is True
+        # GH-437: a session revocation wins over the grant AND over --pangram
+        os.environ["PANGRAM_CONSENT"] = "off"
+        try:
+            for kwargs in ({}, {"cli_pangram": True}, {"venue_gates": ["pangram"], "cli_pangram": True}):
+                score, why = pangram.should_score(start_path=art, **kwargs)
+                assert score is False and "PANGRAM_CONSENT=off" in why, (score, why, kwargs)
+        finally:
+            _clear_env()
     print("  should_score_table: ok")
 
 
+def test_cli_refuses_under_session_revocation():
+    """GH-437: a direct --text upload stops before any network call."""
+    import subprocess
+    with tempfile.TemporaryDirectory() as tmp:
+        f = os.path.join(tmp, "t.md")
+        open(f, "w").write("Some unpublished prose.\n")
+        env = dict(os.environ, PANGRAM_CONSENT="off", PANGRAM_API_KEY="k")
+        r = subprocess.run([sys.executable, pangram.__file__, "--text", f],
+                           capture_output=True, text=True, env=env, timeout=30)
+        assert r.returncode != 0 and "nothing was sent" in r.stderr, (r.returncode, r.stderr)
+    print("  cli_refuses_under_session_revocation: ok")
+
+
 if __name__ == "__main__":
+    test_cli_refuses_under_session_revocation()
     test_no_grant_by_default()
     test_file_grant_and_revoke()
     test_env_precedence()

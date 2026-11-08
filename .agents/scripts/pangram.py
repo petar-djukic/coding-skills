@@ -123,12 +123,18 @@ def should_score(start_path=None, cli_pangram=False, cli_no_pangram=False,
     """Decide whether a driver scores with Pangram this run (GH-210).
 
     A venue whose gates omit "pangram" never uploads, grant or no grant —
-    even over an explicit --pangram. Otherwise the explicit flags win over
+    even over an explicit --pangram. So does a session that set
+    PANGRAM_CONSENT=off (GH-437): a revocation that an explicit --pangram
+    could undo would leave the operator relying on every caller, and every
+    recipe command, to drop the flag. Otherwise the explicit flags win over
     the standing grant, and without any of them nothing is scored.
     Returns (score, reason).
     """
     if venue_gates is not None and "pangram" not in venue_gates:
         return False, "venue gates omit pangram; never uploaded"
+    env = os.environ.get("PANGRAM_CONSENT", "").strip().lower()
+    if env in ("off", "none", "0", "false"):
+        return False, f"env PANGRAM_CONSENT={env} revokes uploads for this session"
     if cli_no_pangram:
         return False, "--no-pangram"
     if cli_pangram:
@@ -435,6 +441,13 @@ def main():
             else:
                 sys.exit(f"preflight failed: {msg}")
         return
+
+    # The session revocation stops a direct upload too (GH-437): a caller
+    # that skips the drivers and calls this CLI must not get round it.
+    env = os.environ.get("PANGRAM_CONSENT", "").strip().lower()
+    if env in ("off", "none", "0", "false") and (a.bulk or a.text):
+        sys.exit(f"pangram: PANGRAM_CONSENT={env} revokes uploads for this "
+                 "session; nothing was sent. Unset it to upload.")
 
     if a.bulk:
         items = json.load(open(a.bulk, encoding="utf-8"))
