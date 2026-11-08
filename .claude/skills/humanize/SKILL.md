@@ -152,7 +152,13 @@ published payloads, seed+iterator isolated on raw articles, prose-only
 Pangram):
 
 (Dated 2026-08-31; superseded by the 2026-09-01 detector-model switch — see
-the Calibration data note. The authorship findings stand; the numbers do not.)
+the Calibration data note. The authorship findings stand; the numbers do not.
+The arm ranking itself is a `default`-model result. It has not been re-run on
+`pangram-4` (GH-406). Both payloads are published newsletter articles, and
+the newsletter venue never uploads, so the re-run needs the operator to
+override that rule for the experiment. Until then, treat "the seed is
+usually the result" and the stop-at-first-upturn expectations below as
+measured on the old model.)
 
 | arm (seed -> iterator) | loop (base 1.000) | prompts (base 0.913) | mean |
 |---|--:|--:|--:|

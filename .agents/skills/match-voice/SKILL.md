@@ -42,6 +42,9 @@ The local register metrics moved the other way in the same run:
 
 Two facts sit behind this. Pangram rated the author's own hand-written prose
 77.8% AI, and `filter-tells` catches only 24% of real AI documents (GH-192).
+The first was a `default`-model reading. On `pangram-4` 4.1, three of the
+author's pre-AI papers read 0.000 AI (GH-406). Those are different texts,
+so the 77.8% figure is not refuted, but it may not hold on the current model.
 **Neither detector is a reliable proxy for "reads as human" on its own.** The
 score is evidence, and a score that falls while the register metrics worsen is
 evidence of the wrong thing.
