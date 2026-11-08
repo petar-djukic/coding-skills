@@ -58,6 +58,71 @@ KINDS = {
 }
 
 
+# Model legs format their reports loosely (GH-442): Ollama legs wrapped
+# every quote in literal double quotes, gpt-oss bolded its headings and
+# labels and shortened quotes with an ellipsis, and each case cost a hand
+# edit or a rerun. These normalise the report before parsing and the quote
+# before matching; the canonical format stays what SKILL.md documents.
+_LABELS = ("Original", "Replacement", "Buys", "Passage", "Finding", "Fix",
+           "Class", "Sweep", "Instance")
+_BOLD_LABEL = re.compile(
+    r"^(\s*(?:[-*]\s+|\d+[.)]\s+)?)\*\*(" + "|".join(_LABELS) + r")(:?)\*\*:?",
+    re.M)
+_BOLD_HEADING = re.compile(r"^(#{2,3} +)\*\*(.+?)\*\*\s*$", re.M)
+_WRAP = "\"'`\u201c\u201d\u2018\u2019"
+
+
+def normalize_report(text):
+    """Bold headings and bold field labels read as plain ones."""
+    text = _BOLD_HEADING.sub(lambda m: m.group(1) + m.group(2), text)
+    return _BOLD_LABEL.sub(lambda m: f"{m.group(2)}:", text)
+
+
+def clean_quote(q):
+    """Strip quote marks and backticks wrapping a quote, as a whole."""
+    q = q.strip()
+    while len(q) >= 2 and q[0] in _WRAP and q[-1] in _WRAP:
+        q = q[1:-1].strip()
+    return q
+
+
+_GAP = re.compile(r"\s*(?:\.\.\.|\u2026|\[\.\.\.\])\s*")
+
+
+def same_passage(a, b):
+    """Do two quotes point at the same passage?
+
+    Similar enough as wholes (the old rule); or the shorter, at least four
+    words, sits inside the longer; or one is elided with "..." and every
+    piece of it occurs, in order, in the other."""
+    na, nb = norm(clean_quote(a)), norm(clean_quote(b))
+    if difflib.SequenceMatcher(None, _GAP.sub(" ", na),
+                               _GAP.sub(" ", nb)).ratio() >= THRESHOLD:
+        return True
+    for x, y in ((na, nb), (nb, na)):
+        if _GAP.search(x):
+            parts = [p for p in _GAP.split(x) if p]
+            pos, ok = 0, bool(parts)
+            for part in parts:
+                i = y.find(part, pos)
+                if i < 0:
+                    ok = False
+                    break
+                pos = i + len(part)
+            if ok and sum(len(p.split()) for p in parts) >= 4:
+                return True
+        elif len(x.split()) >= 4 and x in y:
+            return True
+    return False
+
+
+def representative(quotes):
+    """The quote a group is rendered under: the fullest one without a gap,
+    because critic-apply has to find it verbatim in the article."""
+    whole = [q for q in quotes if not _GAP.search(q)]
+    return max(whole or quotes, key=len)
+
+
 def parse(path):
     """One report into a dict, kind detected from which section it carries.
 
@@ -68,7 +133,7 @@ def parse(path):
     """
     name = os.path.splitext(os.path.basename(path))[0]
     with open(path, encoding="utf-8") as f:
-        text = f.read()
+        text = normalize_report(f.read())
     sect = {}
     for title, body in re.findall(r"^## +([^\n]+)\n(.*?)(?=^## |\Z)", text,
                                   re.S | re.M):
@@ -83,6 +148,7 @@ def parse(path):
     for block in blocks:
         fields = dict(re.findall(pattern, block, re.M))
         if all(f in fields for f in spec["required"]):
+            fields[spec["quote"]] = clean_quote(fields[spec["quote"]])
             items.append({"critic": name, "kind": kind,
                           "quote": fields[spec["quote"]], **fields})
     classes = []
@@ -124,13 +190,16 @@ def group(items_or_reports):
     for r in items_or_reports:
         for s in r["items"]:
             for g in groups:
-                if difflib.SequenceMatcher(
-                        None, norm(g[0]["quote"]),
-                        norm(s["quote"])).ratio() >= THRESHOLD:
+                if any(same_passage(m["quote"], s["quote"]) for m in g):
                     g.append(s)
                     break
             else:
                 groups.append([s])
+    # Render each group under its fullest verbatim quote: an elided or
+    # trimmed quote first in the group would reach critic-apply unfindable.
+    for g in groups:
+        best = representative([m["quote"] for m in g])
+        g.sort(key=lambda m: m["quote"] != best)
     return groups
 
 
@@ -142,9 +211,7 @@ def covered(instance, items):
     sheet leaves in the draft. On substack GH-235 that residue was the
     article's first sentence.
     """
-    return any(difflib.SequenceMatcher(None, norm(instance),
-                                       norm(i["quote"])).ratio() >= THRESHOLD
-               for i in items)
+    return any(same_passage(instance, i["quote"]) for i in items)
 
 
 def collect_classes(reports):
