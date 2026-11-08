@@ -83,6 +83,7 @@ Run `validate_only` first in a repository the skill has not run in.
 | `docs/constitutions/*.yaml`, an SRD, a form constitution | every critic judges against those rules first (critic-panel's "The draft's own rules") |
 | no `writing-voice/` corpus | humanize is skipped: match-voice needs the exemplars |
 | no voice constitution | voice-critic is skipped: it refuses without one |
+| a form voice-critic has no profile for (paper section, README, chapter), or no judge ready (no Cohere key and `gemma4:12b` not pulled) | voice-critic is skipped once, named in the skip list; `voice_critic.py --preflight` decides it and every round reuses its form and model |
 | no YAML front matter | no generation note; the report is the record |
 
 Every skip is named in the report, never silent.
