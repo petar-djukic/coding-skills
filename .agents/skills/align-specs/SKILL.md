@@ -19,7 +19,7 @@ Find all specification files in the project:
 - `docs/ARCHITECTURE.yaml`
 - `docs/SPECIFICATIONS.yaml` (if present)
 - `docs/road-map.yaml` (if present)
-- `docs/specs/product-requirements/prd*.yaml`
+- `docs/specs/software-requirements/srd*.yaml`
 - `docs/specs/use-cases/rel*.yaml`
 - `docs/specs/test-suites/test-rel*.yaml`
 - `docs/engineering/eng*.yaml`
@@ -36,7 +36,7 @@ For each file, read it, then apply the constitution's format rules for that docu
 
 **Style**: Apply the style rules from the constitution — active voice, present tense, remove forbidden terms, no bold in prose paragraphs, no horizontal rules. Do not rewrite substance; fix only what violates a rule.
 
-**Naming conventions**: Check each file's name against the `naming_conventions` block in the constitution (e.g. `prd[NNN]-[feature-name].yaml`, `rel[NN].[N]-uc[NNN]-[short-name].yaml`). Rename the file if it does not match. Update any cross-references in other files that point to the old name.
+**Naming conventions**: Check each file's name against the `naming_conventions` block in the constitution (e.g. `srd[NNN]-[feature-name].yaml`, `rel[NN].[N]-uc[NNN]-[short-name].yaml`). Rename the file if it does not match. Update any cross-references in other files that point to the old name.
 
 **Traceability**: Apply the `traceability_invariants` block (T1–T5) from the constitution. Fix what you can in the spec files. Flag gaps you cannot resolve without human input as `# TODO: link missing`. Do not fabricate IDs.
 

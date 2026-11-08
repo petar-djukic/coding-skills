@@ -23,7 +23,7 @@ branch=$(git branch --show-current)
    and test commands.
 
    If any gate fails, **stop the release**. Do not fix, retry, or waive the
-   failure inline. File a PRD-backed bug via `/gh-issue-push`, implement and
+   failure inline. File an SRD-backed bug via `/gh-issue-push`, implement and
    merge the fix through the normal issue/PR flow, then re-run the release
    against the now-green `main`.
 

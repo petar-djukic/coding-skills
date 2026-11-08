@@ -53,9 +53,9 @@ Context-specific rules that govern how the agent works:
 
 - **git-workflow.md**: Issue tracking, worktree discipline, PR workflow
 - **technical-document-types.md**: Catalog of external document types (concept paper through invention disclosure) with origins and structures
-- **code-prd-architecture-linking.md**: Requirements for linking code to PRDs and architecture docs
+- **code-srd-architecture-linking.md**: Requirements for linking code to SRDs and architecture docs
 - **documentation-standards.md**: Writing style, formatting, figures, and content quality rules
-- **prd-format.md**: Product Requirements Document structure and guidelines
+- **srd-format.md**: Software Requirements Document structure and guidelines
 - **use-case-format.md**: Use case document structure (tracer bullets, demos)
 - **crumb-format.md**: How to structure documentation vs code crumbs
 - **vision-format.md**: Vision document structure and guidelines
@@ -64,13 +64,13 @@ Context-specific rules that govern how the agent works:
 ### commands/
 Workflow templates the agent can follow:
 
-- **align-specs.md**: Align specifications across PRDs, use cases, and test suites
+- **align-specs.md**: Align specifications across SRDs, use cases, and test suites
 - **bd-issue-pop.md**: Pop a bead into a worktree, work on it, and open a PR (beads workflow)
 - **bd-issue-push.md**: Create a bead with ripple-effect analysis (beads workflow)
 - **bd-issue-show.md**: List or inspect beads in the current repository
 - **bootstrap.md**: Create initial VISION.yaml and ARCHITECTURE.yaml for new projects
 - **do-work.md**: Router command to choose between docs and code workflows
-- **do-work-docs.md**: Workflow for documentation tasks (PRDs, use cases, etc.)
+- **do-work-docs.md**: Workflow for documentation tasks (SRDs, use cases, etc.)
 - **do-work-code.md**: Workflow for implementation tasks
 - **exp-start.md**: Create or join an experiment branch in a worktree — local-only by default, or remote-backed (`--remote <owner/repo>`) with two-way `git subtree` sync under a deterministic prefix (`experiments/<slug>`), metadata recorded in `.exp-sync.yaml` on the branch so other machines can rejoin
 - **exp-stop.md**: Conclude and delete an experiment branch; remote-backed experiments additionally show subtree sync state and warn that content pushed to the external repository survives local cleanup (external branch deletion is opt-in only)

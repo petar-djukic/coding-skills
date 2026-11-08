@@ -18,7 +18,7 @@ It checks for pixi (installing it if absent, unless `SKILL_ENV_NO_INSTALL` is se
 
 ## Pre-Commit Quality Gate
 
-Before committing, run `mage audit` and fix all reported YAML schema errors. The audit target checks cross-artifact consistency (PRDs, use cases, test suites, roadmap) and validates YAML fields against Go structs. Unrecognized fields cause data loss in the measure prompt. Do not commit with audit errors.
+Before committing, run `mage audit` and fix all reported YAML schema errors. The audit target checks cross-artifact consistency (SRDs, use cases, test suites, roadmap) and validates YAML fields against Go structs. Unrecognized fields cause data loss in the measure prompt. Do not commit with audit errors.
 
 ## Commit After Every Edit
 
@@ -44,7 +44,7 @@ Follow [rules/documentation-standards.md](rules/documentation-standards.md) (dis
 - Specification-driven: specs are source of truth, code serves specs
 - YAML-first for structured documents, markdown for prose
 - Active voice, concise, no forbidden terms
-- Traceability chain: Vision -> Architecture -> PRDs -> Use cases -> Test suites -> Code
+- Traceability chain: Vision -> Architecture -> SRDs -> Use cases -> Test suites -> Code
 
 For README files specifically, see [rules/readme-format.md](rules/readme-format.md).
 
