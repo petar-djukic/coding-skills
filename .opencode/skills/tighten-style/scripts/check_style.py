@@ -119,10 +119,10 @@ ABBREV_SKIP = {"AI", "API", "CPU", "GPU", "RAM", "URL", "HTTP", "HTTPS", "JSON",
                "OK", "ID", "IDS", "US", "UK", "EU", "GH", "TS", "MIT", "IEEE",
                # Repo vocabulary: universal here, so flagging it measures house
                # style rather than undefined jargon.
-               "PR", "PRD", "PRDS", "LOC", "README", "VISION", "WT", "CI", "CLI",
+               "PR", "PRD", "PRDS", "SRD", "SRDS", "LOC", "README", "VISION", "WT", "CI", "CLI",
                "SDK", "MCP", "OS", "UI", "UX", "TODO", "NDA", "OCR", "PDFS",
                # Filename placeholders and language keywords are not
-               # abbreviations: prd[NNN], SELECT ALL, git HEAD.
+               # abbreviations: srd[NNN], SELECT ALL, git HEAD.
                "NN", "NNN", "N", "XX", "YYYY", "ALL", "HEAD", "MAIN", "EOF",
                "GET", "POST", "PUT", "JSON5", "UTC",
                "GB", "MB", "KB", "TB", "MS", "GHZ", "RAM"}

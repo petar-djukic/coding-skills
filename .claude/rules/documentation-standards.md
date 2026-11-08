@@ -2,11 +2,11 @@
 
 # Documentation Standards
 
-Distilled from `docs/constitutions/design.yaml`. Read the full constitution for document type schemas, completeness checklists, and naming conventions.
+Distilled from `docs/constitutions/design.yaml`. The constitution ships with each target repository, not with this skills repository; read it there for document type schemas, completeness checklists, and naming conventions.
 
 ## Specification-Driven Development
 
-Specifications are the source of truth. Code serves specifications, not the other way around. No implementation code before the PRD and use case exist. No implementation issue before a test suite exists for its use case.
+Specifications are the source of truth. Code serves specifications, not the other way around. No implementation code before the SRD and use case exist. No implementation issue before a test suite exists for its use case.
 
 ## Choosing a Document Type
 
@@ -18,7 +18,7 @@ types below govern documents inside the repository.
 
 ## YAML-First
 
-Use YAML for structured documents (VISION, ARCHITECTURE, PRDs, use cases, test suites). Use markdown for prose-heavy guidelines and specification summaries. YAML is machine-readable by design.
+Use YAML for structured documents (VISION, ARCHITECTURE, SRDs, use cases, test suites). Use markdown for prose-heavy guidelines and specification summaries. YAML is machine-readable by design.
 
 ## Writing Style
 
@@ -43,7 +43,7 @@ All diagrams in Mermaid, defined inline in markdown fenced code blocks. Do not c
 |------|----------|--------|
 | Vision | `docs/VISION.yaml` | vision-format |
 | Architecture | `docs/ARCHITECTURE.yaml` | architecture-format |
-| PRD | `docs/specs/product-requirements/prd[NNN]-[feature-name].yaml` | prd-format |
+| SRD | `docs/specs/software-requirements/srd[NNN]-[feature-name].yaml` | srd-format |
 | Use case | `docs/specs/use-cases/rel[NN].[N]-uc[NNN]-[short-name].yaml` | use-case-format |
 | Test suite | `docs/specs/test-suites/test-rel-[release-id].yaml` | test-case-format |
 | Engineering guideline | `docs/engineering/eng[NN]-[short-name].yaml` | engineering-guideline-format |
@@ -52,9 +52,9 @@ All diagrams in Mermaid, defined inline in markdown fenced code blocks. Do not c
 
 ## Traceability Chain
 
-Vision (goals) -> Architecture (components) -> PRDs (numbered requirements) -> Use cases (tracer bullets) -> Test suites (validation) -> Code (implementation, traces to PRDs via commits).
+Vision (goals) -> Architecture (components) -> SRDs (numbered requirements R1..., acceptance criteria AC1...) -> Use cases (tracer bullets) -> Test suites (validation) -> Code (implementation, traces to SRDs via commits).
 
-Every PRD traces to VISION and ARCHITECTURE. Every use case traces to PRDs via touchpoints. Every test suite traces to use cases via the traces field.
+Every SRD traces to VISION and ARCHITECTURE. Every use case traces to SRDs via touchpoints naming SRD requirement IDs. Every test suite traces to use cases and SRD acceptance criteria via the traces field.
 
 ## Test Suite Linkage
 

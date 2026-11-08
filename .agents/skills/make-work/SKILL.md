@@ -12,7 +12,7 @@ Apply this command workflow. Treat any text after its invocation as the command 
 Read `docs/VISION.yaml` (goals and boundaries), `docs/ARCHITECTURE.yaml`
 (design and components), `docs/road-map.yaml` (release schedule and use-case
 status), `docs/constitutions/design.yaml` (format rules), and the
-product-requirements and use-case READMEs where they exist.
+software-requirements and use-case READMEs where they exist.
 
 Then establish where the work actually stands. **Treat the tracker and the
 roadmap as claims to verify, not as ground truth** — a task that builds on
@@ -39,7 +39,7 @@ Anything failing those checks is unbuilt regardless of tracker state — plan it
 implementation before anything that depends on it.
 
 Run the consistency check if one exists (`mage audit`, or `mage analyze` where
-it is named that way) to surface orphaned PRDs, use cases without test suites,
+it is named that way) to surface orphaned SRDs, use cases without test suites,
 broken references, and use cases missing from the roadmap.
 
 Then summarize: the problem the project solves, its architecture, what is
@@ -63,7 +63,7 @@ Each proposed issue carries:
 - **Requirements, Acceptance Criteria**, and Design Decisions where they matter.
 - Documentation issues additionally name their **format rule** and required
   sections. Code issues state acceptance as tests or observable behaviour, not
-  as PRD-style goals.
+  as SRD-style goals.
 
 Size code tasks at 300-700 production lines across no more than 5 files —
 finishable in one session, substantial enough to matter. Split larger features;

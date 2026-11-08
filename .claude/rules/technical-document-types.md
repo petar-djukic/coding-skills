@@ -11,7 +11,7 @@ life: from idea, to requirements, to design, to standardisation.
 This catalog covers the external and industry forms. For documents inside
 a repository following our conventions, the YAML document types in
 [documentation-standards.md](documentation-standards.md) (VISION,
-ARCHITECTURE, PRDs, use cases, test suites) take precedence; use this
+ARCHITECTURE, SRDs, use cases, test suites) take precedence; use this
 catalog to pick the right form when writing for an audience outside the
 repo.
 
@@ -95,10 +95,10 @@ Atlassian. There is no standards body. Atlassian, Aha! and ProductPlan
 publish reference templates.
 
 When to use. When a product or feature is being scoped, before
-architecture or implementation work starts. For PRDs inside a repository
-following our conventions, the repo's own PRD format (see
-documentation-standards.md) takes precedence; this entry describes the
-industry form.
+architecture or implementation work starts. For requirements documents
+inside a repository following our conventions, the SRD-per-component
+format (see documentation-standards.md) takes precedence; this entry
+describes the industry form.
 
 Structure. Typical sections:
 

@@ -92,7 +92,7 @@ gh issue edit <number> --repo <owner>/<repo> --add-assignee @me
 | **Prose** | [Prose](#prose-workflow) | continuous English a person reads start to finish — paper section, README, post |
 | **Code** | [Code](#code-workflow) | output under `pkg/`, `internal/`, `cmd/`; acceptance stated as tests or behaviour |
 
-Documentation and Prose split on whether the output has a voice: a PRD is read
+Documentation and Prose split on whether the output has a voice: an SRD is read
 by field, a paper section is read as writing, and how it sounds is part of
 whether it is right.
 
@@ -125,7 +125,7 @@ what differs.
    `bd update <child-id> --status done` then `bd sync`, and never
    `git add .beads/` on the code branch.
 
-4. **Commit and push.** Code commits must name the PRDs they implement.
+4. **Commit and push.** Code commits must name the SRDs they implement.
 
    The commit embeds the sub-issue's Requirements, Acceptance Criteria, and
    Design Decisions, copied from the issue body — not re-summarized. Issues
@@ -217,7 +217,7 @@ When no open unit remains, before handing off:
    work them now (they reopen the queue and delay Phase 5), otherwise into
    the tech-debt epic.
 6. If implementation revealed design changes, ask before editing architecture
-   or PRD docs.
+   or SRD docs.
 7. **Execute the matching pop command's Phase 5 in full** — it opens the PR,
    merges to `main`, and closes the epic.
 
@@ -225,7 +225,7 @@ When no open unit remains, before handing off:
 
 ## Documentation Workflow
 
-**YAML documentation** under `docs/`: PRDs, use cases, test suites,
+**YAML documentation** under `docs/`: SRDs, use cases, test suites,
 ARCHITECTURE, engineering guidelines, SPECIFICATIONS.
 
 Read `docs/VISION.yaml` and `docs/ARCHITECTURE.yaml` for context, plus the
@@ -308,16 +308,16 @@ rename turns into an eight-file edit.
 ## Code Workflow
 
 **Implementation**: packages, internal logic, cmd, workers, tests. Code must
-correspond to existing PRDs and architecture (the code-prd-architecture-linking
-rule), and commits must name the PRDs.
+correspond to existing SRDs and architecture (the code-srd-architecture-linking
+rule), and commits must name the SRDs.
 
-Read `docs/VISION.yaml` and `docs/ARCHITECTURE.yaml`, the PRDs the sub-issue
+Read `docs/VISION.yaml` and `docs/ARCHITECTURE.yaml`, the SRDs the sub-issue
 names, and its Requirements / Design Decisions / Acceptance Criteria in full.
 Read every file in Required Reading before touching it — **never propose
 changes to code you have not read**.
 
 Implement to the Requirements and Design Decisions. Write the tests the
-sub-issue or PRD specifies, and verify the Acceptance Criteria hold as
+sub-issue or SRD specifies, and verify the Acceptance Criteria hold as
 behaviour, not as intent.
 
 Do not write comments that rot. No `release 00.X`, `stub`, `placeholder`, `for
