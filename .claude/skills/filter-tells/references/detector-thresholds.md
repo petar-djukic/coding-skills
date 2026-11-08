@@ -37,6 +37,8 @@ and awaits measurement against labeled human prose.
 | coinage min_count | ≥2 uses, 2–3-grams, no definition marker | detect_coinage | advisory by design; terms-of-art fire it (audit) |
 | voice-distance flag | \|z\| ≥ 2.0 (rel ≥ .5 fallback) | voice_distance | conventional 2-sigma; uncalibrated |
 | density tells (/500w) | tricolon <3, paren-def <4, passive-enabling <2, rather-than <2, contrast-flip <2, both-and <1.5 | analyze | GH-45..52 era motivating docs; uncalibrated |
+| paired-universal | two "every" in one sentence, or literal "each X and each Y"; zero tolerance | detect_paired_universals | GH-410: 0.015 (author) and 0.027 (venue) per 1000w on paper-stash pre-AI exemplars, 3 in one 4,400-word AI draft; "each" alone excluded — native to technical prose (author papers > 4/500w) |
+| universal-heavy (/500w) | "every" > 2.5, raised by idiolect `universal-quantifier` | analyze | GH-410: pre-AI max 2.12 (venue), 1.08 (author) over 141 samples, 0 fire; AI draft 3.5 |
 | verdict ladder | ≥2 high, or 1 high + 2 med → likely-ai; 1 high or 2 med → suspicious | analyze | severity aggregation; uncalibrated |
 
 ## detect-lexical.sh

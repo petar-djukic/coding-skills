@@ -42,6 +42,7 @@ Instruments: `lex` = detect-lexical.sh, `str` = detect-structural.py,
 | Tell | Instrument | Reference |
 |---|---|---|
 | Antithesis / negation-flip pairs | str regex + P6 (zero tolerance) | banned-patterns; P6 |
+| Paired distributive universals ("for every agent and every task") and "every" density | str (`paired-universal`, zero tolerance; `universal-heavy`, author ceiling) | banned-patterns: Distributive Universal Pairs (GH-410) |
 | Rhetorical set pieces (allegory sweep, anadiplosis, imperative closer…) | P6b | banned-patterns: Set Pieces |
 | Punch clustering / epigram-closing paragraphs | str (`punch_*`) + P7 | rewrite-instructions §3b |
 | Overshoot / uniform maximal polish ("LinkedIn voice") | str (two-sided metrics) + P0, P7 | SKILL: overshoot warnings |

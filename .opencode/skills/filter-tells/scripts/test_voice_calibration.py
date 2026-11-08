@@ -199,7 +199,36 @@ def test_cli_discovery_and_opt_out():
     print("  cli_discovery_and_opt_out: ok")
 
 
+def test_universal_quantifier_calibration():
+    """GH-410: the idiolect marker sets every-density ceiling and target."""
+    bank = ("purpose: x\nmarkers:\n- id: universal-quantifier\n"
+            "  regex: '\\bevery\\b (case-insensitive)'\n  essay_target: 6.0\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        cal = ds.load_calibration(make_voice(tmp, bank=bank))
+        assert abs(cal["universal_target_per_500"] - 3.0) < 1e-9
+        assert abs(cal["universal_max_per_500"] - 6.0 * 1.3 / 2) < 1e-9
+    every = ("We review every change before it merges, and the reviewer "
+             "signs the record. ") * 2
+    filler = ("The service reads the queue, writes the result to storage, "
+              "and reports the latency to the dashboard each minute. ") * 6
+    text = every + filler
+    flat = ds.analyze(text)
+    assert "universal-heavy" in _types(flat), flat["metrics"]
+    high = ds.analyze(text, calibration={"source": "x",
+                                         "universal_max_per_500": 9.0,
+                                         "universal_target_per_500": 8.0})
+    assert "universal-heavy" not in _types(high), "a higher author ceiling wins"
+    low = ds.analyze(text, calibration={"source": "x",
+                                        "universal_max_per_500": 0.2,
+                                        "universal_target_per_500": 0.15})
+    issue = [i for i in low["issues"] if i["type"] == "universal-heavy"][0]
+    assert "calibration" not in issue, "a lower ceiling never tightens flat"
+    assert "0.15" in issue["detail"], "but its target steers the advice"
+    print("  universal_quantifier_calibration: ok")
+
+
 def main():
+    test_universal_quantifier_calibration()
     test_load_calibration()
     test_flat_behavior_unchanged_without_calibration()
     test_journal_register_must_not_flag_calibrated()

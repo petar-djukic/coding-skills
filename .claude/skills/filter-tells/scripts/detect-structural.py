@@ -561,6 +561,67 @@ def detect_meta_narration(sentences: list) -> list:
     return issues
 
 
+# Distributive universals (GH-410). "for every agent and every task": a model
+# reaches for the paired quantifier where a person writes "for each agent's
+# tasks" or drops the quantifier because the sentence is already general.
+# Measured on a 4,400-word AI-drafted charter against the author's pre-AI
+# corpus: "every" at 3.5 per 500 words against 0.30, and three
+# "every X and every Y" pairs against none.
+#
+# "every" carries the signal and "each" does not. Over paper-stash's pre-AI
+# exemplars (22 author papers, 130k words; 119 venue samples, 1.45M words)
+# "every" ran 0.33 and 0.27 per 500 words with no author sample above 1.08,
+# and two "every" in one sentence came 0.015-0.027 times per 1000 words.
+# "each" in the same author papers ran past 4 per 500 ("each node", "each
+# slot"): native to technical prose, so counting it would flag the author.
+# Only the literal coordinated "each X and each Y" counts as a pair.
+_EVERY = re.compile(r"\bevery\b", re.IGNORECASE)
+_EACH_PAIR = re.compile(
+    r"\beach\s+[A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*)?\s+(?:and|or)\s+each\b(?!\s+other\b)",
+    re.IGNORECASE)
+
+
+def universal_count(text: str) -> int:
+    """Occurrences of "every" in ``text`` (the density the scan measures)."""
+    return len(_EVERY.findall(text))
+
+
+def detect_paired_universals(sentences: list) -> list:
+    """Flag a sentence that pairs a distributive universal.
+
+    Zero tolerance, like meta-narration: one pair per sentence is the tell,
+    whatever the document's length. Covers "every X and every Y", "every X
+    ... every Y" anywhere in one sentence, and the coordinated "each X and
+    each Y".
+    """
+    issues = []
+    for i, sent in enumerate(sentences):
+        flat = " ".join(sent.split())
+        if len(_EVERY.findall(flat)) >= 2:
+            q = "every"
+        elif _EACH_PAIR.search(flat):
+            q = "each"
+        else:
+            continue
+        snippet = flat[:110] + ("..." if len(flat) > 110 else "")
+        issues.append({
+            "type": "paired-universal",
+            "detail": (f'"{q} X ... {q} Y" in one sentence: "{snippet}". '
+                       f'Collapse the pair ("for each agent\'s tasks") or drop '
+                       f'the quantifier where the sentence is already general.'),
+            "severity": "medium",
+            "position": f"sentence {i + 1}",
+        })
+    return issues
+
+
+# Flat ceiling for "every" per 500 words: above every pre-AI sample measured
+# (venue max 2.12), below the GH-410 draft (3.5). An author-calibrated ceiling
+# from the idiolect `universal-quantifier` marker only ever raises it, as for
+# colons and dashes; its target still steers the advice when it is lower.
+UNIVERSAL_DENSITY_MAX = 2.5
+
+
 # --------------------------------------------------------------------------- #
 # Overshoot detectors ("LinkedIn voice", punches, word salad, formulae)
 # --------------------------------------------------------------------------- #
@@ -1384,6 +1445,13 @@ def filter_tells_paragraph(para_text: str, threshold_name: str = "medium",
             m["paragraph"] = para_index + 1
         issues.extend(meta_issues)
 
+    # --- Paired universals (GH-410) ---
+    paired_issues = detect_paired_universals(sentences_all)
+    metrics["paired_universal_count"] = len(paired_issues)
+    for m in paired_issues:
+        m["paragraph"] = para_index + 1
+    issues.extend(paired_issues)
+
     # --- Consequence-echo (GH-244, advisory) ---
     conseq_issues = detect_consequence_echo(sentences_all)
     metrics["consequence_echo_count"] = len(conseq_issues)
@@ -1684,6 +1752,11 @@ def analyze(text: str, threshold_name: str = "medium",
     if meta_narration_issues:
         issues.extend(meta_narration_issues)
 
+    # --- Paired universals (GH-410): zero tolerance, no density gate ---
+    paired_universal_issues = detect_paired_universals(sentences_all)
+    metrics["paired_universal_count"] = len(paired_universal_issues)
+    issues.extend(paired_universal_issues)
+
     # --- Consequence-echo (subordinate clause restating its main; GH-244) ---
     consequence_echo_candidates = detect_consequence_echo(sentences_all)
     metrics["consequence_echo_count"] = len(consequence_echo_candidates)
@@ -1808,6 +1881,31 @@ def analyze(text: str, threshold_name: str = "medium",
                 f"author-calibrated ceiling {dash_max:.1f} (idiolect "
                 f"em-dash target + tolerance). Reduce toward the target, "
                 f"not to zero — the em-dash aside is the voice.")
+        issues.append(issue)
+
+    # --- Universal-quantifier density (GH-410) ---
+    universal_density = (universal_count(prose) / word_count) * 500 if word_count > 0 else 0
+    metrics["universal_density_per_500w"] = round(universal_density, 2)
+    universal_max = UNIVERSAL_DENSITY_MAX
+    universal_calibrated = bool(calibration and "universal_max_per_500" in calibration
+                                and calibration["universal_max_per_500"] > universal_max)
+    if universal_calibrated:
+        universal_max = calibration["universal_max_per_500"]
+    if universal_density > universal_max:
+        target = (calibration or {}).get("universal_target_per_500")
+        issue = {
+            "type": "universal-heavy",
+            "detail": (f"{universal_density:.1f} \"every\" per 500 words "
+                       f"(threshold: <{universal_max:.1f}). Reduce toward "
+                       + (f"the author's {target:.2f}" if target is not None
+                          else "a plain-prose rate near 0.3")
+                       + ", not to zero: drop the quantifier where the "
+                       "sentence is already general."),
+            "severity": "low",
+            "metric": universal_density,
+        }
+        if universal_calibrated:
+            issue["calibration"] = "author-ceiling"
         issues.append(issue)
 
     # --- Tricolon density ---

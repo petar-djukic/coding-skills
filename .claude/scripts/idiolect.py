@@ -114,7 +114,7 @@ def load_calibration(voice_dir):
     Only markers present in the bank contribute — the idiolect's marker
     list drives the calibrated set. Mapping: colon-verdict -> colon
     density, em-dash -> dash density, antithesis-not -> the antithesis
-    detector family. Missing or unparseable means no calibration, which
+    detector family, universal-quantifier -> every/each density. Missing or unparseable means no calibration, which
     is the unchanged flat-threshold behaviour, not an error.
     """
     try:
@@ -134,4 +134,11 @@ def load_calibration(voice_dir):
     if isinstance(t, (int, float)):
         cal["antithesis_target_per_1000"] = t
         cal["antithesis_max_per_1000"] = t * (1 + TOLERANCE)
+    # GH-410: every/each density. The target is reported in the scan's advice
+    # even when it sits below the flat ceiling, so a rewrite reduces toward
+    # the author's rate rather than only toward the flat one.
+    t = markers.get("universal-quantifier", {}).get("essay_target")
+    if isinstance(t, (int, float)):
+        cal["universal_target_per_500"] = t / 2.0
+        cal["universal_max_per_500"] = t * (1 + TOLERANCE) / 2.0
     return cal if len(cal) > 1 else None
