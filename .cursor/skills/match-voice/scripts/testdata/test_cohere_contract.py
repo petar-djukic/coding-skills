@@ -2,8 +2,9 @@
 
 Encodes what docs.cohere.com documents (2026-08-31) plus what this repository
 measured where the docs are silent. Offline: every HTTP call is mocked. The
-live smoke tests live in the same file, skip without a key, and are the only
-tests here that spend requests.
+live smoke tests live in the same file and are the only tests here that
+spend requests; they run only with COHERE_LIVE_TESTS=1 and a resolvable key
+(GH-447), so the release gate never calls Cohere.
 
 Documented, and pinned here:
   - request: endpoint, bearer auth, roles, temperature passthrough, seed
@@ -178,10 +179,16 @@ class LiveSmoke(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # Opt-in, not key-gated (GH-447): once the key resolved from
+        # .secrets/, every release gate spent paid requests and sent prompts
+        # off the machine, and the seed test failed whenever Cohere varied.
+        if os.environ.get("COHERE_LIVE_TESTS") != "1":
+            raise unittest.SkipTest(
+                "live contract smoke is opt-in: set COHERE_LIVE_TESTS=1")
         if not rewrite._cohere_key():
             raise unittest.SkipTest(
-                "no Cohere key (COHERE_API_KEY / COHERE_SECRETS_FILE) — "
-                "live contract smoke skipped")
+                "no Cohere key (COHERE_API_KEY / COHERE_SECRETS_FILE / "
+                ".secrets/) — live contract smoke skipped")
 
     def test_plain_model_text_block_only(self):
         sink = []
