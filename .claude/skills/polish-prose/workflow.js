@@ -146,6 +146,15 @@ const VOICE = {
   required: ['failed', 'flags'],
 }
 
+const STEP6 = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['clean', 'flagged'] },
+    findings: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['verdict', 'findings'],
+}
+
 const DIFF = {
   type: 'object',
   properties: {
@@ -206,6 +215,7 @@ if (!A.skip_humanize && pre.has_voice_corpus) {
 ${PANGRAM ? '' : NO_UPLOAD}
 
 Commit each stage's output as it lands, one commit per stage, with the stage name in the subject ("filter-tells: <slug>", "match-voice: <slug>", "tighten: <slug>", ...). Do not squash.
+filter-tells Step 6 (the independent evaluator) is not yours to run: this workflow runs it after you, as its own agent in a fresh context, because the context that made the rewrites cannot be the one that judges them. Skip it, and say in your report that it was handed off.
 Respect locked spans and these protected spans verbatim:
 ${list(pre.protected_spans)}
 If a model call fails on TLS certificates, point SSL_CERT_FILE at certifi's bundle; read API keys only through the repository's secrets convention and never print them.
@@ -215,6 +225,21 @@ Return seed reach exactly as the skill reports it, each stage with its score, an
     { label: 'humanize', schema: HUMANIZE })
   if (!hum) return { status: 'failed', stage: 'humanize', preflight: pre }
   log(`humanize: seed reach ${hum.seed_reach}`)
+}
+
+// filter-tells Step 6 in a fresh context (GH-443). Run inside the humanize
+// agent it had no subagent tool, so the triage was done by the context that
+// made the rewrites, the maker-checker gap Step 6 exists to close.
+let step6 = { verdict: 'skipped', findings: [], reason: hum.ran ? '' : 'humanize did not run' }
+if (hum.ran) {
+  step6 = await agent(`You are filter-tells' Step 6 independent evaluator for ${ART}, in a fresh context. Read "### Step 6: Final Semantic Verification (independent evaluator)" in ${SK}/filter-tells/SKILL.md and follow it.
+
+You see only the final text: ${ART} as it stands now. You have not seen the rewrite history, the reasoning, or the diffs, and you must not look: do not read git log, git diff, earlier commits, or any sidecar. For the Step 3 report, run filter-tells' own lexical and structural scans (${SK}/filter-tells/scripts/detect-lexical.sh and detect-structural.py) on ${ART} yourself.
+
+Take the stance Step 6 gives you: assume the rewrites introduced new patterns, and find them. Return verdict "clean" only if you find none; otherwise "flagged", with each finding as one line: the quoted span, the pattern, and what would fix it. Change nothing in ${ART}. ${COMMIT('filter-tells step 6: <slug> (independent evaluator)')} The body carries the verdict and one line per finding. ${HYGIENE}`,
+    { label: 'filter-tells step 6', phase: 'Humanize', schema: STEP6, effort: 'medium' })
+  if (!step6) step6 = { verdict: 'failed', findings: [], reason: 'the evaluator agent failed' }
+  log(`filter-tells step 6 (fresh context): ${step6.verdict}, ${step6.findings.length} finding(s)`)
 }
 
 // ---------------------------------------------------------------- Review
@@ -282,7 +307,7 @@ function keepBlock(focusAnswers) {
 }
 
 const rounds = []
-let residue = []
+let residue = (step6.findings || []).map((f) => `filter-tells step 6 (independent evaluator after humanize): ${f}`)
 // Cross-family ross findings left unfixed (GH-439). After round 1 ross only
 // repairs regressions, so a finding already in the text had no route to a
 // fix: in the S2 run the same unglossed terms were reported NOT FIXED in
@@ -450,6 +475,7 @@ return {
   baseline_sha: pre.baseline_sha,
   focus_file: pre.focus_file || null,
   humanize: hum,
+  step6,
   rounds,
   final_read: finalRead ? { convergent: finalRead.convergent, focus_answers: finalRead.focus_answers, classes: finalRead.classes } : null,
   residue,
