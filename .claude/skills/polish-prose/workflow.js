@@ -20,6 +20,12 @@ const MAX = A.max_rounds || 3
 const ROSS_FIX_ROUNDS = 2
 const STEM = ART.replace(/\.md$/, '')
 const DEFAULT_ROSTER = ['Levine', 'Didion', 'Hemingway']
+// Uploads are opt-in per run (GH-437). The standing consent grant lets the
+// humanize drivers score every stage by default, and a run that forgot
+// --venue uploaded an unpublished journal section about eight times. A run
+// uploads only when the caller passes pangram: true.
+const PANGRAM = A.pangram === true
+const NO_UPLOAD = `No Pangram uploads in this run: the caller did not opt in (args.pangram). Run every command with PANGRAM_CONSENT=off in its environment, which the writing-voice rule makes win over a standing grant, and pass --no-pangram to every driver that accepts it. Record every Pangram score as "not measured". Where the skill's stop-at-the-upturn rule needs a score to stop on, run one pass and stop.`
 const REQUIRED_SKILLS = ['humanize', 'reverse-outline', 'critic-panel', 'critic-apply', 'cold-review', 'voice-critic']
 
 const NO_PROSE = 'You never write article prose yourself. Text changes only through the owning skill: rewrites go through the rewrite transport, deletions and verbatim reverts apply mechanically.'
@@ -48,13 +54,14 @@ const PREFLIGHT = {
     has_voice_corpus: { type: 'boolean' },
     has_voice_constitution: { type: 'boolean' },
     baseline_sha: { type: 'string' },
+    venue: { type: 'string' },
     voice_form: { type: 'string' },
     voice_model: { type: 'string' },
     voice_skip: { type: 'string' },
   },
   required: ['ok', 'reason', 'branch', 'missing', 'focus_file', 'focus_items', 'precheck_command', 'form', 'protected_spans',
     'roster_name', 'roster', 'draft_rules', 'has_front_matter', 'has_voice_corpus', 'has_voice_constitution', 'baseline_sha',
-    'voice_form', 'voice_model', 'voice_skip'],
+    'voice_form', 'voice_model', 'voice_skip', 'venue'],
 }
 
 const HUMANIZE = {
@@ -170,29 +177,32 @@ const pre = await agent(`Preflight for a polish-prose run on ${ART}. The file ca
 6. The draft's own rules: per the "The draft's own rules" section of ${SK}/critic-panel/SKILL.md, list every rules file found beside or above the file (docs/constitutions/voice.yaml, docs/constitutions/argument.yaml, the chapter's SRD under docs/srd/, or a matching constitution under .claude/constitutions/) in draft_rules.
 7. Optional stages: has_front_matter = the file starts with a YAML front-matter block; has_voice_corpus = a writing-voice/ directory with exemplars is found walking up from the file (humanize needs it); has_voice_constitution = writing-voice/voice-constitution.md is found the same way (voice-critic needs it).
 8. voice-critic readiness, once for the whole run: if has_voice_constitution, run ${SK}/voice-critic/scripts/voice_critic.py --preflight --form "<the form from step 4>" (in the skills' pixi environment, as ${SK}/voice-critic/SKILL.md says) and copy its JSON fields: voice_form = "form", voice_model = "model", voice_skip = "skip" (empty string for any null). Do not retry it with another form or model, and do not pull a model: a skip is a finding, reported once. If has_voice_constitution is false, return all three as empty strings.
-9. ${A.validate_only ? 'Do not commit. Return baseline_sha as the current HEAD.' : `If ${ART} has uncommitted changes, commit them alone as "draft: <slug> (pre-pipeline baseline)". Return baseline_sha as HEAD after that.`}`,
+9. Venue: ${A.venue ? `the caller says ${A.venue}; return it.` : `look for writing-voice/venues/*.yaml walking up from the file. If profiles exist, return the name of the one whose description fits the form from step 4 (a paper section is academic, a book chapter is book, a newsletter post is newsletter, a how-to or technical essay is technical-essay, an industry report or whitepaper is industry-report); return an empty string when none fits or there are no profiles. Do not guess past the descriptions.`}
+10. ${A.validate_only ? 'Do not commit. Return baseline_sha as the current HEAD.' : `If ${ART} has uncommitted changes, commit them alone as "draft: <slug> (pre-pipeline baseline)". Return baseline_sha as HEAD after that.`}`,
   { label: 'preflight', schema: PREFLIGHT, effort: 'low' })
 
 if (!pre || !pre.ok) {
   return { status: 'refused', reason: pre ? pre.reason : 'preflight agent failed', preflight: pre }
 }
 const CRITICS = pre.roster && pre.roster.length ? pre.roster : DEFAULT_ROSTER
+const VENUE = A.venue || pre.venue || ''
 const skipped = []
 if (!pre.has_voice_corpus) skipped.push('humanize (no writing-voice/ corpus found)')
 if (!pre.has_voice_constitution) skipped.push('voice-critic (no voice constitution found)')
 else if (pre.voice_skip || !pre.voice_form || !pre.voice_model) skipped.push(`voice-critic (${pre.voice_skip || 'preflight returned no form or judge'})`)
 const VOICE_READY = pre.has_voice_constitution && !pre.voice_skip && pre.voice_form && pre.voice_model
 if (!pre.has_front_matter) skipped.push('generation note (no front matter; the report is the record)')
-log(`branch ${pre.branch}; form ${pre.form || 'unknown'}; roster ${pre.roster_name || 'article'} (${CRITICS.join(', ')}); focus file ${pre.focus_file || 'none (generic read)'}; ${pre.protected_spans.length} protected spans${skipped.length ? `; skipping: ${skipped.join('; ')}` : ''}`)
+log(`branch ${pre.branch}; form ${pre.form || 'unknown'}; venue ${VENUE || 'none'}; pangram ${PANGRAM ? 'opted in' : 'off'}; roster ${pre.roster_name || 'article'} (${CRITICS.join(', ')}); focus file ${pre.focus_file || 'none (generic read)'}; ${pre.protected_spans.length} protected spans${skipped.length ? `; skipping: ${skipped.join('; ')}` : ''}`)
 if (A.validate_only) {
-  return { status: 'validated', roster: CRITICS, skipped, preflight: pre }
+  return { status: 'validated', roster: CRITICS, venue: VENUE || null, pangram: PANGRAM, skipped, preflight: pre }
 }
 
 // ---------------------------------------------------------------- Humanize
 phase('Humanize')
 let hum = { ran: false, seed_reach: 'skipped', stages: [], notes: A.skip_humanize ? 'skip_humanize set by caller' : 'no writing-voice/ corpus found; humanize needs its exemplars' }
 if (!A.skip_humanize && pre.has_voice_corpus) {
-  hum = await agent(`Run the humanize skill on ${ART}: read ${SK}/humanize/SKILL.md and follow it end to end, exactly as written, including its stage order, its measurements, and its report. ${A.venue ? `Use venue mode with --venue ${A.venue}.` : ''}
+  hum = await agent(`Run the humanize skill on ${ART}: read ${SK}/humanize/SKILL.md and follow it end to end, exactly as written, including its stage order, its measurements, and its report. ${VENUE ? `Use venue mode with --venue ${VENUE}.` : ''}
+${PANGRAM ? '' : NO_UPLOAD}
 
 Commit each stage's output as it lands, one commit per stage, with the stage name in the subject ("filter-tells: <slug>", "match-voice: <slug>", "tighten: <slug>", ...). Do not squash.
 Respect locked spans and these protected spans verbatim:
@@ -403,6 +413,8 @@ Then delete every remaining sidecar whose name starts with ${STEM} other than th
 return {
   status: stable ? 'stable' : 'round-cap',
   article: ART,
+  venue: VENUE || null,
+  pangram: PANGRAM ? 'opted in' : 'off',
   roster: CRITICS,
   skipped,
   branch: pre.branch,

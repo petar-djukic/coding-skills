@@ -17,7 +17,7 @@ description: >-
   Workflow run. Triggers: improve this, polish this, make it better,
   tighten this, it's meh, it reads flat, clean up this draft, rewrite
   this, full rewrite, humanize and review, run the whole pipeline.
-argument-hint: '<file.md> [--skip-humanize] [--max-rounds N] [--roster name] [--focus-file path] [--venue name]'
+argument-hint: '<file.md> [--skip-humanize] [--max-rounds N] [--roster name] [--focus-file path] [--venue name] [--pangram]'
 ---
 
 # Polish Prose (humanize, then review until stable)
@@ -70,7 +70,8 @@ written to a sheet.
 | `max_rounds` | 3 | review rounds before the read-only final pass |
 | `focus_file` | discovered | path to the caller's `critic-focus.md` |
 | `form` | inferred | the file's form; selects its constitution and voice-critic caps |
-| `venue` | none | passed to humanize's venue mode |
+| `venue` | inferred | passed to humanize's venue mode; preflight picks the `writing-voice/venues/` profile that fits the form (a paper section is `academic`) when the caller names none |
+| `pangram` | false | `true` opts this run into Pangram uploads. Off by default, whatever the standing consent says: every stage then runs with `PANGRAM_CONSENT=off` and `--no-pangram`, and scores read "not measured" (GH-437) |
 | `validate_only` | false | preflight only: reports roster, focus file and skipped stages, changes nothing |
 
 Run `validate_only` first in a repository the skill has not run in.
