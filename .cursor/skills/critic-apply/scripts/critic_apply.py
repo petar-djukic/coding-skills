@@ -170,8 +170,51 @@ def apply_deletion(par_text, quote, body):
     return "\n".join(markers + [new]) if markers else new
 
 
-def gate(orig_clean, cand):
+# Words a critic uses about prose and a paragraph about its subject almost
+# never does (GH-440). In the S2 run a candidate replaced a claim with "The
+# gloss tells a modelling reader who TM Forum is...", another with "The
+# consequence moves from a participle tail...", and both passed every gate.
+# A term counts only when the candidate introduces it: a paragraph that
+# already says "reader" may keep saying it.
+_EDITORIAL = re.compile(
+    r"\b(gloss(?:es|ed)?|participles?|participial|nominali[sz]ations?|"
+    r"finite (?:verb|clause)s?|subordinate clauses?|clauses?|"
+    r"(?:this|the|that) (?:sentence|paragraph|passage|rewrite|edit|critic)s?|"
+    r"(?:a|the|modelling|modeling|cold) readers?|"
+    r"consequence moves|moves from a|warrant tails?|the original (?:sentence|claim|wording))\b",
+    re.I)
+ECHO_RUN = 6
+
+
+def _words_lower(text):
+    return [w.lower() for w in WORD.findall(text)]
+
+
+def rationale_leak(orig_clean, cand, instruction=""):
+    """Why `cand` reads as the edit's reasoning rather than the subject, or
+    "" when it does not. Two signals: critic vocabulary the original did not
+    use, and a run of ECHO_RUN or more words copied from the instruction
+    that the original did not already contain."""
+    new_terms = sorted({m.group(0).lower() for m in _EDITORIAL.finditer(cand)}
+                       - {m.group(0).lower() for m in _EDITORIAL.finditer(orig_clean)})
+    if new_terms:
+        return f"editorial rationale in candidate ({', '.join(new_terms)})"
+    if instruction:
+        iw, cw = _words_lower(instruction), _words_lower(cand)
+        orig_text = " ".join(_words_lower(orig_clean))
+        cand_text = " ".join(cw)
+        for i in range(len(iw) - ECHO_RUN + 1):
+            run = " ".join(iw[i:i + ECHO_RUN])
+            if run in cand_text and run not in orig_text:
+                return f"candidate echoes the instruction (\"{run}\")"
+    return ""
+
+
+def gate(orig_clean, cand, instruction=""):
     """Mechanical gate. Returns (ok, reason)."""
+    leak = rationale_leak(orig_clean, cand, instruction)
+    if leak:
+        return False, leak
     if sorted(NUM.findall(CITE.sub(" ", cand))) != \
             sorted(NUM.findall(CITE.sub(" ", orig_clean))):
         return False, "number multiset changed"
@@ -291,7 +334,7 @@ def _apply_chain(par_text, steps, generate):
                 rec["cause"] = str(e)[:120]
                 continue
             cand = (cand or "").strip().strip("`").strip()
-            ok, why_not = gate(clean, cand)
+            ok, why_not = gate(clean, cand, data)
             if not ok:
                 rec["status"] = "kept-gate"
                 rec["cause"] = why_not

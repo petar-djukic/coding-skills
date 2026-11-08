@@ -271,6 +271,54 @@ def test_jobs_do_not_change_the_output():
     print("  jobs_do_not_change_the_output: ok")
 
 
+# --- GH-440: a replacement that talks about the edit is kept by the gate ---
+
+P1 = ("Fault management in networks is the TM Forum's oldest process area. "
+      "TM Forum is the industry body that standardizes operations software.")
+
+
+def test_rationale_leaks_from_the_s2_run_are_kept():
+    leaks = [
+        "The gloss tells a modelling reader who TM Forum is. Fault management in networks is its oldest process area.",
+        "The consequence moves from a participle tail into its own sentence. Fault management in networks is the TM Forum's oldest process area.",
+    ]
+    for cand in leaks:
+        ok, why = ca.gate(P1, cand, "gloss TM Forum for a modelling reader")
+        assert not ok and "editorial rationale" in why, (cand, why)
+    print("  rationale_leaks_from_the_s2_run_are_kept: ok")
+
+
+def test_instruction_echo_is_kept():
+    instr = "state the shared mechanism the two loops use instead of naming the principle"
+    cand = ("Fault management in networks is the TM Forum's oldest process area; "
+            "it states the shared mechanism the two loops use.")
+    ok, why = ca.gate(P1, cand, instr)
+    assert not ok and "echoes the instruction" in why, why
+    print("  instruction_echo_is_kept: ok")
+
+
+def test_plain_rewrite_and_existing_vocabulary_pass():
+    ok, why = ca.gate(P1, "Fault management is the TM Forum's oldest process area. "
+                          "TM Forum is the body that standardizes operations software.",
+                      "shorter")
+    assert ok, why
+    orig = "A reader who skips the appendix loses the proof, and the reader knows it."
+    ok, why = ca.gate(orig, "A reader who skips the appendix loses the proof and knows it.", "trim")
+    assert ok, why
+    print("  plain_rewrite_and_existing_vocabulary_pass: ok")
+
+
+def test_rationale_leak_is_kept_gate_in_a_run():
+    q = "Fault management in networks is the TM Forum's oldest process area."
+    art = "# T\n\n" + P1 + "\n"
+    sh = sheet(conv(q, [("a", "Gloss it.", "gloss TM Forum"), ("b", "Gloss it.", "gloss TM Forum")]))
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh),
+        generate=lambda p: "The gloss tells a modelling reader who TM Forum is. " + P1.split(". ", 1)[1])
+    assert recs[0]["status"] == "kept-gate" and "editorial" in recs[0]["cause"], recs
+    assert P1 in new
+    print("  rationale_leak_is_kept_gate_in_a_run: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -285,4 +333,8 @@ if __name__ == "__main__":
     test_quote_consumed_by_an_earlier_edit()
     test_chain_drift_rolls_back_to_a_fitting_prefix()
     test_jobs_do_not_change_the_output()
+    test_rationale_leaks_from_the_s2_run_are_kept()
+    test_instruction_echo_is_kept()
+    test_plain_rewrite_and_existing_vocabulary_pass()
+    test_rationale_leak_is_kept_gate_in_a_run()
     print("all critic-apply tests passed")

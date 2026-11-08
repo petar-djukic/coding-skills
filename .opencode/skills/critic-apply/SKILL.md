@@ -47,7 +47,11 @@ rules decide, and the rules are arguable because they are deterministic.
   prose is never spliced; it is guidance at most.
 - **The gate**: number multiset (citations masked first), citation
   multiset (`[@key]` and `[n]`), em-dash and colon counts capped at the
-  original's, candidate length within 0.5–1.35× of the original. A
+  original's, candidate length within 0.5–1.35× of the original, and no
+  editorial rationale: critic vocabulary the original did not use
+  ("gloss", "participle", "the reader", "this sentence") or a run of six
+  or more words copied from the instruction (GH-440; one run replaced
+  claims with "The gloss tells a modelling reader who TM Forum is..."). A
   gated rejection keeps the original, recorded with its reason.
 - **Deletions apply directly** with mechanical punctuation
   normalization; omission is not authorship.
