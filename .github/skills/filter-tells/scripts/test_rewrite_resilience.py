@@ -41,7 +41,7 @@ def _run(rewrite_fn, max_passes=1):
             with open(art, "w") as f:
                 f.write(ARTICLE)
             result = drive.run_rewrite(art, _scan(), None, "http://unused",
-                                       "test-model", 5, max_passes=max_passes)
+                                       "test-model", 5, max_passes=max_passes, scope="all")
             draft = open(result["draft_path"]).read() if "draft_path" in result else ""
             return result, draft
     finally:
