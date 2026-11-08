@@ -1049,3 +1049,22 @@ external one — the whole value of an outside detector is that it is outside.
 
 **A result is evidence, not a verdict.** It never certifies a document on its
 own; see filter-tells's Verdict Validity Rules.
+
+## Which detector model a score came from
+
+The standing model is `pangram-4` (GH-406). It matches the detector
+Substack runs, which readers' platforms will apply. `scripts/pangram.py`
+sends it on every request and stamps the model and version on every report;
+`PANGRAM_MODEL` overrides it. Before commit b6c649a (2026-09-01 23:25
+-0400) the client sent no `model`, the API resolved that to `default`, and
+every score recorded until then is a `default` score. On identical text the
+two read 15.7% and 64.1% AI.
+
+Compare scores only within one model. Within-pipeline A/Bs from before the
+switch stay valid, since both arms rode `default`. Absolute numbers do not
+carry over: a gate threshold, a recipe's stopping score, a bake-off's
+Pangram column, or an article's generation-block figure measured before
+2026-09-01 is re-measured on `pangram-4` before it gates anything. The
+vendor also changed versions separately (identical prose read 0.445 on
+`default` 3.3.2 on 2026-08-28 and 1.000 on 4.1 on 2026-11-04), so a
+report's version stamp matters as much as its model.

@@ -1,5 +1,7 @@
 # Model choice
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 Which model to rewrite with, and why. Read once when setting up or when
 changing models; the default works without it.
 

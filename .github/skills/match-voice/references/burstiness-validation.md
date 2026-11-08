@@ -1,5 +1,7 @@
 # Burstiness pass — validation on fresh drafts and the true slot
 
+> Pangram scores dated before 2026-09-02 were measured on the `default` model; later ones on `pangram-4` (GH-406). Compare scores only within one model; see "Which detector model a score came from" in the writing-voice rule.
+
 Date: 2026-08-28. Issue: GH-132, under GH-129. Model: `gemma4:31b-cloud` via
 the Ollama HTTP API. Detector: Pangram, prose-only payloads, one scan per arm.
 Artifacts (arm outputs, payloads, raw responses) live in the substack

@@ -4,6 +4,8 @@ and the method contract lives in ../SKILL.md. -->
 
 # Cohere bake-off (GH-138)
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 Cohere's command-a models against the incumbent cross-family rewriters
 (gemma4:31b-cloud, gpt-oss:120b-cloud, kimi-k2.6:cloud), run through the real
 match-voice driver (retrieval → rewrite → mechanical gate → critique), 2026-08-28.

@@ -1,5 +1,7 @@
 # Hand-tightening regression (2026-07-26, worktrees article)
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 Evidence re-homed from write-article step 6g (GH-214/substack#297): why
 the tightening pass must run through the rewrite transport and never by
 hand. Four variants of the worktrees article — itself an AI draft:

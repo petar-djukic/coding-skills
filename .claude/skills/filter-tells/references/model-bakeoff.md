@@ -1,5 +1,7 @@
 # filter-tells model bake-off (GH-147)
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 Which model to run filter-tells' semantic analysis + targeted rewrite with, and
 why. Parallel to the match-voice bake-off (writing-skills GH-138). 2026-08-29.
 

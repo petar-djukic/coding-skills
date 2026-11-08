@@ -17,6 +17,8 @@ description: >-
 
 # Accent Dial (pre-terminal stage)
 
+> Pangram scores here were measured on the `default` model, before the client switched to `pangram-4` on 2026-09-01 (GH-406). Compare them with each other, never with a current score; see "Which detector model a score came from" in the writing-voice rule.
+
 The EN→SR→EN round-trip is the only measured source of the author's
 Serbian-L1 accent: the regular published articles carry ZERO calques and
 sit below the native exemplars on the L2 composite (paper-stash
