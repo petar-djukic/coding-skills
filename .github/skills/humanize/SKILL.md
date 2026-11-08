@@ -134,7 +134,7 @@ catches, so the iterator runs free while the seed carries the register.
 
 ## Prerequisites
 
-- A Cohere key (`COHERE_API_KEY` / `COHERE_SECRETS_FILE`) — every stage's
+- A Cohere key (`COHERE_API_KEY`, `COHERE_SECRETS_FILE`, or `cohere` in `.secrets/`) — every stage's
   *default* model is `cohere:command-a-03-2025` since GH-176–190, except
   accent-dial (deliberate `gemma4:31b-cloud`, see Phase 4)
 - Ollama endpoint reachable — required by the keyless fallbacks and the

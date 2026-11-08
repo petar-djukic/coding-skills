@@ -52,6 +52,7 @@ ENV_VARS = {
     "serpapi": "SERPAPI_KEY",
     "semantic_scholar": "SEMANTIC_SCHOLAR_API_KEY",
     "ollama": "OLLAMA_API_KEY",
+    "cohere": "COHERE_API_KEY",
 }
 
 

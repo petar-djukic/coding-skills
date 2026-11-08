@@ -17,7 +17,8 @@ project and, if that checkout is public, with everyone.
   "pangram": "...",
   "serpapi": "...",
   "semantic_scholar": "...",
-  "ollama": "..."
+  "ollama": "...",
+  "cohere": "..."
 }
 ```
 
@@ -73,7 +74,9 @@ been through any of those is disclosed; rotate it rather than filing it.
 
 ## Consumers
 
-`scripts/pangram.py`, `update-references/scripts/scholar.py`, and
-`update-references/scripts/semantic_scholar.py` resolve through
-`scripts/credentials.py`. `python3 <surface>/scripts/credentials.py` reports
+`scripts/pangram.py`, `update-references/scripts/scholar.py`,
+`update-references/scripts/semantic_scholar.py`, and
+`match-voice/scripts/rewrite.py` resolve through `scripts/credentials.py`. The
+last is the shared model transport, so every stage that calls a `cohere:`
+model finds its key the same way. `python3 <surface>/scripts/credentials.py` reports
 which services are configured, printing names and status, never values.

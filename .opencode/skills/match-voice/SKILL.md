@@ -96,8 +96,9 @@ strengthen a claim. Nothing is spliced into a draft until the gate passes.
 
 **Model choice.** Default `cohere:command-a-03-2025` — the GH-138/142 bake-off
 winner: it drives a draft toward human where the gemma family *raises* the
-Pangram score, and runs clean through the gate. It needs `COHERE_API_KEY` or
-`COHERE_SECRETS_FILE`, sends the paragraph to Cohere's API, and bills per token.
+Pangram score, and runs clean through the gate. It needs a Cohere key
+(`COHERE_API_KEY`, `COHERE_SECRETS_FILE`, or `cohere` in the repository's
+`.secrets/`), sends the paragraph to Cohere's API, and bills per token.
 **A keyless machine, or one where the draft must not leave it, sets `--model
 gemma4:12b`** (or `MATCH_VOICE_MODEL`) — the local GH-163 winner that runs
 anywhere; `gemma4:31b-mlx` reaches the top tier on a 32 GB Apple Silicon box
@@ -484,8 +485,10 @@ from `drive.py`, filter-tells, and burstiness — no stage grows its own client.
   `--critic-model` / `COHERE_CRITIC_MODEL` still override.
   Transient API errors (429/5xx/timeout, and 422s other
   than `INVALID_TOOL_GENERATION`) are retried (`COHERE_MAX_RETRIES`, default 3).
-- **Key** comes from `COHERE_API_KEY`, or from the JSON file named by
-  `COHERE_SECRETS_FILE` (key `cohere`). Never hardcoded, never committed. The
+- **Key** comes from `COHERE_API_KEY`, then the JSON file named by
+  `COHERE_SECRETS_FILE` (key `cohere`), then service `cohere` in the
+  `.secrets/` directory found by walking up from the working directory
+  (the secrets rule; GH-429). Never hardcoded, never committed. The
   no-Claude-fallback contract holds: a missing key or an unreachable endpoint
   stops the run, it does not silently fall back.
 - **It is a hosted API**, so the paragraph text leaves the machine (as the
