@@ -110,9 +110,10 @@ const APPLY = {
     kept: { type: 'integer' },
     declined: { type: 'integer' },
     unapplied_convergent: { type: 'array', items: { type: 'string' } },
+    applied_targets: { type: 'array', items: { type: 'string' } },
     committed_sha: { type: 'string' },
   },
-  required: ['candidate_path', 'applied', 'kept', 'declined', 'unapplied_convergent', 'committed_sha'],
+  required: ['candidate_path', 'applied', 'kept', 'declined', 'unapplied_convergent', 'applied_targets', 'committed_sha'],
 }
 
 const COLD = {
@@ -221,7 +222,7 @@ const focusBlock = pre.focus_items.length
   ? `FOCUS LIST. Answer every item explicitly, BY NAME, inside your ## Diagnosis, before your free read:\n${list(pre.focus_items)}`
   : 'No focus list was supplied for this repository: give your free read.'
 
-async function panel(o, residue, round, tag) {
+async function panel(o, residue, rejected, round, tag) {
   const criticReports = await parallel(CRITICS.map((name) => () => agent(`You are the ${name} critic on a critic-panel Mode A read. Fresh context by design: you have not seen any other critic's report and must not look for one.
 
 Read your persona brief (the ${name} entry) in ${SK}/critic-panel/references/personas.md; it states your kind (suggest or verdict). From ${SK}/critic-panel/SKILL.md read "The two report formats" (use your kind's format with its literal headings) and "Constraints" (the shared ones and your kind's). Then read the reading copy at ${o.copy_path}.
@@ -233,6 +234,8 @@ Measured length: ${o.total_words} prose words. Paragraphs over the paragraph bud
 ${list(o.flagged_paragraphs)}
 
 ${residue.length ? `Residue from the previous round. For each item, say in your Diagnosis whether it is still present:\n${list(residue)}` : ''}
+
+${rejected.length ? `Closed: cold review rejected these edits in earlier rounds. Do not propose them again, in any wording. If the passage still needs work, propose a different change and say in its Buys line how it avoids the rejected one:\n${list(rejected)}` : ''}
 
 Write your report to ${STEM}.critic-${name.toLowerCase()}.md and return only the word done.`,
     { label: `${tag} r${round}: ${name}`, phase: tag === 'final' ? 'Final read' : 'Review' })))
@@ -280,6 +283,17 @@ function keepBlock(focusAnswers) {
 
 const rounds = []
 let residue = []
+// Edits cold review rejected, closed for the rest of the run (GH-438). The
+// S2 run re-proposed, re-applied and re-reverted the same three edits in
+// every round because the next panel never heard about the reverts.
+const rejected = []
+const closeRejected = (review, applyResult, round, stage) => {
+  if (!review || !applyResult) return
+  const lines = review.verdict === 'reject candidate'
+    ? (applyResult.applied_targets || [])
+    : (review.reverts || [])
+  for (const line of lines) rejected.push(`rejected by cold review in round ${round} (${stage}), do not re-propose: ${line}`)
+}
 let stable = false
 let lastSheet = null
 
@@ -295,7 +309,7 @@ ${NO_PROSE}`,
     { label: `r${round}: outline + length`, phase: 'Review', schema: OUTLINE, effort: 'low' })
   if (!outline) return { status: 'failed', stage: `round ${round} outline`, rounds }
 
-  const sheet = await panel(outline, residue, round, 'panel')
+  const sheet = await panel(outline, residue, rejected, round, 'panel')
   if (!sheet) return { status: 'failed', stage: `round ${round} converge`, rounds }
   lastSheet = sheet
 
@@ -305,7 +319,7 @@ Pass as protected spans (write them to a temporary spans file):
 ${list(pre.protected_spans)}
 Pass --cheap-paragraphs ${outline.cheap_paragraphs.join(',') || '(none)'} from reverse-outline's rank.
 Write the skill's candidate over ${ART}: cold review judges it next, as a commit, so a rejected attempt stays in history. ${COMMIT(`critic-apply: <slug> (round ${round}, candidate)`)} The body carries the applied/kept/declined counts and one line per target not applied, with its status.
-Return the article path as candidate_path, the counts, every convergent target that was not applied (first words plus the reason), and HEAD after your commit as committed_sha.
+Return the article path as candidate_path, the counts, every convergent target that was not applied (first words plus the reason), every target that was applied (first words plus the change, one line each) as applied_targets, and HEAD after your commit as committed_sha.
 Then delete the three critic reports and the sheet. ${NO_PROSE}`,
     { label: `r${round}: critic-apply`, phase: 'Review', schema: APPLY })
   if (!applied) return { status: 'failed', stage: `round ${round} critic-apply`, rounds }
@@ -314,6 +328,7 @@ Then delete the three critic reports and the sheet. ${NO_PROSE}`,
   if (applied.applied > 0) {
     cold = await coldReview(applied.committed_sha, round, 'critic-apply', `r${round}: cold review`)
     if (!cold) return { status: 'failed', stage: `round ${round} cold review`, rounds, unreviewed_candidate: applied.committed_sha, note: `HEAD carries an unreviewed critic-apply candidate; reset ${ART} to ${applied.committed_sha}^ before using the branch` }
+    closeRejected(cold, applied, round, 'critic-apply')
   }
 
   phase('Review')
@@ -321,6 +336,7 @@ Then delete the three critic reports and the sheet. ${NO_PROSE}`,
 
 Read your persona brief, the "## Iceberg — The Inference Test" entry in ${SK}/critic-panel/references/personas.md, and "## Category 16: Warrant Tails" in ${SK}/filter-tells/references/cot-leakage-patterns.md; from ${SK}/critic-panel/SKILL.md read "The two report formats" (suggest format, literal headings) and "Constraints". Build your own reading copy of ${ART} as it stands now with ${SK}/critic-panel/scripts/prepare_copy.py, and sweep all of it: return every warrant tail that passes the removal test, with no cap. Replacement is CUT or the quoted span with words removed and none added.
 ${keepBlock(sheet.focus_answers)}
+${rejected.length ? `Closed: cold review rejected these edits in earlier rounds; do not suggest them again:\n${list(rejected)}` : ''}
 
 Write the report to ${STEM}.critic-iceberg-${leg}.md, delete your reading copy, and return only: done, N suggestions.`,
     { label: `r${round}: iceberg ${leg}`, phase: 'Review' })))
@@ -331,12 +347,13 @@ ${icebergKeep}
 ` : ''}Then run the critic-apply skill (${SK}/critic-apply/SKILL.md) on the sheet with these protected spans:
 ${list(pre.protected_spans)}
 Convergent cuts and deletion-only trims apply directly with no model call; report any target that could not be placed (for example a span inside a list item, which critic-apply does not locate) instead of placing it by hand. Write the skill's candidate over ${ART}: cold review judges it next, as a commit. ${COMMIT(`iceberg: <slug> (round ${round}, candidate)`)} The body carries each leg's suggestion count, the applied/kept/declined counts, and one line per cut not applied, with its reason.
-Return the article path as candidate_path, the counts, every convergent target left unapplied (first words plus the reason), and HEAD after your commit as committed_sha. ${HYGIENE}`,
+Return the article path as candidate_path, the counts, every convergent target left unapplied (first words plus the reason), every cut that was applied (first words, one line each) as applied_targets, and HEAD after your commit as committed_sha. ${HYGIENE}`,
     { label: `r${round}: iceberg apply`, phase: 'Review', schema: APPLY, effort: 'low' })
   let icebergCold = null
   if (iceberg && iceberg.applied > 0) {
     icebergCold = await coldReview(iceberg.committed_sha, round, 'iceberg', `r${round}: iceberg cold review`)
     if (!icebergCold) return { status: 'failed', stage: `round ${round} iceberg cold review`, rounds, unreviewed_candidate: iceberg.committed_sha, note: `HEAD carries an unreviewed iceberg candidate; reset ${ART} to ${iceberg.committed_sha}^ before using the branch` }
+    closeRejected(icebergCold, iceberg, round, 'iceberg')
   }
   log(`round ${round}: iceberg legs ${icebergLegs.filter(Boolean).length}/2, ${iceberg ? iceberg.applied : 0} warrant tails cut in the candidate, cold review ${icebergCold ? icebergCold.verdict : 'not run'}`)
 
@@ -395,7 +412,7 @@ if (!stable) {
   const o = await agent(`Prepare a read-only final panel read of ${ART}: build the reading copy with ${SK}/critic-panel/scripts/prepare_copy.py and return its path. ${pre.precheck_command ? `Run ${pre.precheck_command.replace('{article}', ART)} and return the total and flagged paragraphs.` : 'Return the prose word count and an empty flagged list.'} Return round_start_sha as HEAD and empty arrays for the reverse-outline fields. Change nothing.`,
     { label: 'final: copy + length', phase: 'Final read', schema: OUTLINE, effort: 'low' })
   if (o) {
-    finalRead = await panel(o, residue, MAX + 1, 'final')
+    finalRead = await panel(o, residue, rejected, MAX + 1, 'final')
     if (finalRead) residue = [...finalRead.convergent.map((c) => `${c.passage} — ${c.why} (x${c.critics})`), ...finalRead.paragraph_moves]
   }
 }
@@ -404,8 +421,10 @@ if (!stable) {
 phase('Record')
 const record = await agent(`${pre.has_front_matter ? `Record this polish-prose run in ${ART}'s front matter generation: block, following the provenance conventions the repository already uses there (append an entry, or start the block if there is none; never rewrite earlier entries).` : `${ART} has no front matter, so write no generation note: skip straight to the sidecar sweep below, and commit only if a sidecar was tracked.`} The entry names the pipeline (polish-prose), humanize seed reach (${hum.seed_reach}), the number of review rounds (${rounds.length}), whether the loop ended on a stable read (${stable}), per-round applied/kept/declined counts and cold-review verdicts:
 ${rounds.map((r) => `round ${r.round}: applied ${r.applied}, kept ${r.kept}, declined ${r.declined}, cold ${r.cold}, convergent ${r.convergent}`).join('\n')}
-and the residue still open:
+the residue still open:
 ${list(residue)}
+and the edits cold review rejected, closed for the run (${rejected.length}):
+${list(rejected)}
 
 Then delete every remaining sidecar whose name starts with ${STEM} other than the article itself (critic copies, reports, sheets, *.applied.md, *.outline.md, JSON reports), list any you could not delete, and commit the file as "polish-prose: <slug> (generation note)" if it changed. Return HEAD and the leftover list.`,
   { label: 'record', phase: 'Record', schema: RECORD, effort: 'low' })
@@ -424,5 +443,6 @@ return {
   rounds,
   final_read: finalRead ? { convergent: finalRead.convergent, focus_answers: finalRead.focus_answers, classes: finalRead.classes } : null,
   residue,
+  rejected,
   record,
 }

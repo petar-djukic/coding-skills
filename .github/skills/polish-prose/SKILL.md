@@ -126,7 +126,11 @@ A panel read binds only the text it read (critic-panel Mode A). Each
 round reads the current text; if the round changed the prose (markers
 excluded), the next round re-reads it, carrying this round's unapplied
 convergent targets and paragraph moves as residue the critics must
-check by name. The loop ends when a round changes nothing: that round
+check by name. Every edit cold review reverted, or every applied target
+of a candidate it rejected, joins a closed list the panel and the
+Iceberg legs are told not to re-propose, for the rest of the run
+(GH-438): without it, one run proposed, applied and reverted the same
+three edits in all three rounds. The loop ends when a round changes nothing: that round
 was a read of the final text. At the round cap, one read-only panel
 pass runs on the final text, so the report always describes what ships.
 
