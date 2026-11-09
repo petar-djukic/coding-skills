@@ -127,7 +127,10 @@ A panel read binds only the text it read (critic-panel Mode A). Each
 round reads the current text; if the round changed the prose (markers
 excluded), the next round re-reads it, carrying this round's unapplied
 convergent targets and paragraph moves as residue the critics must
-check by name. Every edit cold review reverted, or every applied target
+check by name: the open items join the focus list as numbered items
+(R1, R2, ...), and the merge returns one consensus answer per item,
+marked "unanswered" when no critic took it up (GH-457). Shown apart from
+the focus list, they were answered in round 1 and dropped after. Every edit cold review reverted, or every applied target
 of a candidate it rejected, joins a closed list the panel and the
 Iceberg legs are told not to re-propose, for the rest of the run
 (GH-438): without it, one run proposed, applied and reverted the same

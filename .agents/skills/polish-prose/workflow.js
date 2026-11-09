@@ -97,9 +97,10 @@ const SHEET = {
     paragraph_moves: { type: 'array', items: { type: 'string' } },
     classes: { type: 'array', items: { type: 'string' } },
     focus_answers: { type: 'array', items: { type: 'string' } },
+    residue_answers: { type: 'array', items: { type: 'string' } },
     single_critic: { type: 'integer' },
   },
-  required: ['sheet_path', 'convergent', 'paragraph_moves', 'classes', 'focus_answers', 'single_critic'],
+  required: ['sheet_path', 'convergent', 'paragraph_moves', 'classes', 'focus_answers', 'residue_answers', 'single_critic'],
 }
 
 const APPLY = {
@@ -253,12 +254,15 @@ async function panel(o, residue, rejected, round, tag) {
 Read your persona brief (the ${name} entry) in ${SK}/critic-panel/references/personas.md; it states your kind (suggest or verdict). From ${SK}/critic-panel/SKILL.md read "The two report formats" (use your kind's format with its literal headings) and "Constraints" (the shared ones and your kind's). Then read the reading copy at ${o.copy_path}.
 ${pre.draft_rules.length ? `Judge against the draft's own rules, which outrank a generic standard:\n${list(pre.draft_rules)}` : ''}
 
-${focusBlock}
+${residue.length
+    ? `${pre.focus_items.length ? focusBlock : 'FOCUS LIST. Answer every item explicitly, BY NAME, inside your ## Diagnosis, before your free read:'}
+Open items carried from earlier stages, part of the focus list (GH-457). Answer each one BY NUMBER and NAME in your Diagnosis: still present, fixed, or not a defect, with the reason:
+${residue.map((r, i) => `R${i + 1}. ${r}`).join('\n')}`
+    : focusBlock}
 
 Measured length: ${o.total_words} prose words. Paragraphs over the paragraph budget:
 ${list(o.flagged_paragraphs)}
 
-${residue.length ? `Residue from the previous round. For each item, say in your Diagnosis whether it is still present:\n${list(residue)}` : ''}
 
 ${rejected.length ? `Closed: cold review rejected these edits in earlier rounds. Do not propose them again, in any wording. If the passage still needs work, propose a different change and say in its Buys line how it avoids the rejected one:\n${list(rejected)}` : ''}
 
@@ -271,8 +275,8 @@ Write your report to ${STEM}.critic-${name.toLowerCase()}.md and return only the
 
 Run ${SK}/critic-panel/scripts/converge.py on them with --out ${STEM}.critic-sheet.md --roster ${CRITICS.map((n) => n.toLowerCase()).join(',')}. If a report is refused as unparseable, fix only its headings and field labels to the literal format in ${SK}/critic-panel/SKILL.md (never its content) and re-run.
 
-From the sheet and the reports return: every convergent passage (2+ critics) with its first words, the shared reason, and the critic count; the paragraph moves; the declared defect classes; the consensus answer to each focus-list item from the Diagnoses (one line each); and the single-critic suggestion count. Keep the critic reports and sheet on disk (the next stage reads the sheet) and return its path.
-${COMMIT(tag === 'final' ? 'panel: <slug> (final read)' : `panel: <slug> (round ${round})`)} The body carries the convergent count, one line per convergent passage (first words and reason), and one line per focus-list answer.`,
+From the sheet and the reports return: every convergent passage (2+ critics) with its first words, the shared reason, and the critic count; the paragraph moves; the declared defect classes; the consensus answer to each focus-list item from the Diagnoses (one line each); one line per open item R1, R2, ... in residue_answers, giving its number, the consensus (still present, fixed, not a defect) and how many critics answered it, with "unanswered" when none did; and the single-critic suggestion count. Keep the critic reports and sheet on disk (the next stage reads the sheet) and return its path.
+${COMMIT(tag === 'final' ? 'panel: <slug> (final read)' : `panel: <slug> (round ${round})`)} The body carries the convergent count, one line per convergent passage (first words and reason), one line per focus-list answer, and one line per open-item answer.`,
     { label: `${tag} r${round}: converge`, phase: tag === 'final' ? 'Final read' : 'Review', schema: SHEET, effort: 'low' })
 }
 
@@ -422,6 +426,7 @@ Return the legs you ran (model names), every cross-family convergent finding as 
     flagged_paragraphs: outline.flagged_paragraphs.length,
     convergent: sheet.convergent.length,
     focus_answers: sheet.focus_answers,
+    residue_answers: sheet.residue_answers,
     classes: sheet.classes,
     applied: applied.applied,
     kept: applied.kept,
