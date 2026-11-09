@@ -190,7 +190,25 @@ def test_summarize_passes_and_manifest():
     print("  summarize_passes_and_manifest: ok")
 
 
+def test_register_rises_are_mechanical_findings():
+    """GH-458: a candidate that buries verbs or adds colons goes to repair."""
+    orig = "The checker verifies the configuration before the engine deploys it."
+    nom = "The checker performs verification of the configuration before deployment by the engine."
+    colon = "The checker does one thing: it verifies the configuration before deployment."
+    r = cq.register_rises(orig, nom)
+    assert r["nominalization"] is True and r["colon"] is False, r
+    m = cq.mechanical(orig, colon, [], [])
+    assert m["new_colon"] is True, m
+    assert cq.merge(m, None)["verdict"] == "repair"
+    text = cq.render_constraints({**m, "new_nominalization": True})
+    assert "verbs into nouns" in text and "colon" in text, text
+    same = cq.mechanical(orig, "The checker verifies each configuration before the engine deploys it.", [], [])
+    assert same["new_nominalization"] is False and same["new_colon"] is False
+    print("  register_rises_are_mechanical_findings: ok")
+
+
 def main():
+    test_register_rises_are_mechanical_findings()
     test_mechanical_fields()
     test_parse_model()
     test_merge_routing()

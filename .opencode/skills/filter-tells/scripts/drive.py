@@ -568,6 +568,10 @@ def gate(original: str, candidate: str, protected: list | None = None,
     reasons += [f"term lost: {t['from']}" for t in crit.get("term_swaps") or []]
     if crit.get("new_antithesis"):
         reasons.append("staged a contrast the original did not have")
+    if crit.get("new_nominalization"):
+        reasons.append("raised nominalizations over the original")
+    if crit.get("new_colon"):
+        reasons.append("added a colon the original did not have")
     if crit.get("new_tricolon"):
         reasons.append("added a three-item list the original did not have")
     reasons += [f"meaning: {d}" for d in crit.get("meaning_deltas") or []]

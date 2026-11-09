@@ -397,6 +397,15 @@ def main():
                 vcmd += ["--must-preserve"] + a.must_preserve
             v = run(vcmd)
             if v.returncode == 0:
+                # Tightening that buries verbs or adds colons moves away from
+                # the register this stage exists to restore (GH-458): the gate
+                # above checks meaning, not register.
+                import critique as _crit
+                rises = [k for k, up in _crit.register_rises(txt, cand_clean).items() if up]
+                if rises:
+                    rec["register_refused"] = rises
+                    status = "kept-original"
+                    continue
                 rec["cand"] = cand_clean
                 status = "tightened"
                 break
