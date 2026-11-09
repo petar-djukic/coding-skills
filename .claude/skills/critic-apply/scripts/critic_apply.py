@@ -181,7 +181,13 @@ _EDITORIAL = re.compile(
     r"finite (?:verb|clause)s?|subordinate clauses?|clauses?|"
     r"(?:this|the|that) (?:sentence|paragraph|passage|rewrite|edit|critic)s?|"
     r"(?:a|the|modelling|modeling|cold) readers?|"
-    r"consequence moves|moves from a|warrant tails?|the original (?:sentence|claim|wording))\b",
+    r"consequence moves|moves from a|warrant tails?|the original (?:sentence|claim|wording)|"
+    # The pipeline and its rules (GH-453): S4 leaked "align with Canadian
+    # spelling conventions", "as claimed by the SRD", and "(cold review
+    # rejected its deletion)" past the list above.
+    r"cold[- ]review|critics?|the panel|(?:the|an?) SRD|spelling conventions?|"
+    r"(?:the|its|this) constitution|focus (?:brief|list)|residue|"
+    r"(?:rejected|reverted|restored) (?:its |the |this )?(?:deletion|edit|rewrite|cut)s?)\b",
     re.I)
 ECHO_RUN = 6
 
@@ -192,20 +198,26 @@ def _words_lower(text):
 
 def rationale_leak(orig_clean, cand, instruction=""):
     """Why `cand` reads as the edit's reasoning rather than the subject, or
-    "" when it does not. Two signals: critic vocabulary the original did not
-    use, and a run of ECHO_RUN or more words copied from the instruction
-    that the original did not already contain."""
-    new_terms = sorted({m.group(0).lower() for m in _EDITORIAL.finditer(cand)}
-                       - {m.group(0).lower() for m in _EDITORIAL.finditer(orig_clean)})
+    "" when it does not: editorial or pipeline vocabulary the original did
+    not use.
+
+    A run copied from the instruction counts only when it carries that
+    vocabulary (GH-453). Copying alone is not a leak: a verdict critic's Fix
+    often holds the gloss itself ("gloss harness as the code around the
+    model"), and refusing the copy refused exactly the rewrites that would
+    define S4's undefined terms, in every round."""
+    def terms(text):
+        return {m.group(0).lower() for m in _EDITORIAL.finditer(text)}
+    new_terms = sorted(terms(cand) - terms(orig_clean))
     if new_terms:
         return f"editorial rationale in candidate ({', '.join(new_terms)})"
     if instruction:
-        iw, cw = _words_lower(instruction), _words_lower(cand)
+        iw = _words_lower(instruction)
         orig_text = " ".join(_words_lower(orig_clean))
-        cand_text = " ".join(cw)
+        cand_text = " ".join(_words_lower(cand))
         for i in range(len(iw) - ECHO_RUN + 1):
             run = " ".join(iw[i:i + ECHO_RUN])
-            if run in cand_text and run not in orig_text:
+            if run in cand_text and run not in orig_text and terms(run):
                 return f"candidate echoes the instruction (\"{run}\")"
     return ""
 

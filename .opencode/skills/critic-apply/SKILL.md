@@ -48,10 +48,13 @@ rules decide, and the rules are arguable because they are deterministic.
 - **The gate**: number multiset (citations masked first), citation
   multiset (`[@key]` and `[n]`), em-dash and colon counts capped at the
   original's, candidate length within 0.5–1.35× of the original, and no
-  editorial rationale: critic vocabulary the original did not use
-  ("gloss", "participle", "the reader", "this sentence") or a run of six
-  or more words copied from the instruction (GH-440; one run replaced
-  claims with "The gloss tells a modelling reader who TM Forum is..."). A
+  editorial rationale: critic or pipeline vocabulary the original did not
+  use ("gloss", "participle", "the reader", "this sentence", "cold review",
+  "the SRD", "spelling conventions"), GH-440 and GH-453. One run replaced
+  claims with "The gloss tells a modelling reader who TM Forum is...",
+  another wrote "(cold review rejected its deletion)". Copying the
+  instruction is not refused by itself: a verdict critic's Fix often holds
+  the gloss to insert, and refusing the copy left undefined terms open. A
   gated rejection keeps the original, recorded with its reason.
 - **Deletions apply directly** with mechanical punctuation
   normalization; omission is not authorship.

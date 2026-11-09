@@ -288,13 +288,30 @@ def test_rationale_leaks_from_the_s2_run_are_kept():
     print("  rationale_leaks_from_the_s2_run_are_kept: ok")
 
 
-def test_instruction_echo_is_kept():
-    instr = "state the shared mechanism the two loops use instead of naming the principle"
-    cand = ("Fault management in networks is the TM Forum's oldest process area; "
-            "it states the shared mechanism the two loops use.")
-    ok, why = ca.gate(P1, cand, instr)
-    assert not ok and "echoes the instruction" in why, why
-    print("  instruction_echo_is_kept: ok")
+def test_a_gloss_copied_from_the_fix_passes():
+    """GH-453: a verdict critic's Fix carries the gloss; copying it is the edit."""
+    tail = (" Each agent keeps its own workspace, and the engine reads the "
+            "workspace back when the next step starts, so nothing is lost between steps.")
+    orig = "The harness runs each tool call and records its result in the workspace." + tail
+    instr = "gloss harness as the code around the model that runs its tools"
+    cand = ("The harness, the code around the model that runs its tools, runs "
+            "each tool call and records its result in the workspace." + tail)
+    ok, why = ca.gate(orig, cand, instr)
+    assert ok, why
+    print("  a_gloss_copied_from_the_fix_passes: ok")
+
+
+def test_pipeline_vocabulary_leaks_from_the_s4_run_are_kept():
+    orig = ("Each colour of the mesh marks one kind of entity, and the checker "
+            "verifies the whole configuration before deployment.")
+    for cand in (
+        "Each colour of the mesh marks one kind of entity, and the spelling will align with Canadian spelling conventions.",
+        "Each colour of the mesh marks one kind of entity, as claimed by the SRD, and the checker verifies the configuration.",
+        "Each colour of the mesh marks one kind of entity (cold review rejected its deletion), and the checker verifies it.",
+    ):
+        ok, why = ca.gate(orig, cand, "plainer")
+        assert not ok and "editorial rationale" in why, (cand, why)
+    print("  pipeline_vocabulary_leaks_from_the_s4_run_are_kept: ok")
 
 
 def test_plain_rewrite_and_existing_vocabulary_pass():
@@ -392,7 +409,8 @@ if __name__ == "__main__":
     test_chain_drift_rolls_back_to_a_fitting_prefix()
     test_jobs_do_not_change_the_output()
     test_rationale_leaks_from_the_s2_run_are_kept()
-    test_instruction_echo_is_kept()
+    test_a_gloss_copied_from_the_fix_passes()
+    test_pipeline_vocabulary_leaks_from_the_s4_run_are_kept()
     test_plain_rewrite_and_existing_vocabulary_pass()
     test_rationale_leak_is_kept_gate_in_a_run()
     test_cut_paired_with_a_kept_rewrite_is_kept()
