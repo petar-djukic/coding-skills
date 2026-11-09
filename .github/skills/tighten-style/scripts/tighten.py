@@ -469,15 +469,43 @@ def main():
     # GH-209: persistent changed-paragraph sidecar for the scoped
     # filter-tells pass — results.json above lives in a mkdtemp the OS
     # reaps. 1-based md_paragraphs prose numbers.
+    # The register record (GH-466). The GH-458 check compares counts per
+    # paragraph; a pass that cuts words while keeping every nominalization
+    # still raises the per-1,000 rate, and a report quoting only the rate
+    # read as a check that never fired. Counts, rates and refusals are
+    # reported together, in the sidecar and in the summary, so the two are
+    # never confused again.
+    from register_markers import NOMINALIZATION as _NOM
+    before_txt = "\n\n".join(t for _s, _e, t in parsed.paragraphs)
+    after_txt = "\n\n".join(r.get("cand") or t
+                             for r, (_s, _e, t) in zip(results, parsed.paragraphs))
+    def _reg(text):
+        words = len(text.split()) or 1
+        n = len(_NOM.findall(text))
+        return {"words": words, "nominalizations": n,
+                "nominalizations_per_1000": round(n * 1000 / words, 1),
+                "colons": text.count(":")}
+    register = {"before": _reg(before_txt), "after": _reg(after_txt),
+                "refused": sorted(r["n"] for r in results if r.get("register_refused")),
+                "refused_for": sorted({k for r in results for k in r.get("register_refused", [])})}
+
     sidecar = out + ".tighten.json"
     with open(sidecar, "w") as f:
-        json.dump({"changed_paragraphs": sorted(r["n"] for r in tightened)}, f)
+        json.dump({"changed_paragraphs": sorted(r["n"] for r in tightened),
+                   "register": register}, f)
 
     from collections import Counter
     print(f"draft: {out}\nwork:  {work}/results.json")
     print(f"changed-paragraph sidecar: {sidecar}")
     for k, v in sorted(Counter(r["status"] for r in results).items()):
         print(f"  {k}: {v}")
+    b, af = register["before"], register["after"]
+    print(f"register: nominalizations {b['nominalizations']} -> {af['nominalizations']} "
+          f"(per 1,000 words {b['nominalizations_per_1000']} -> {af['nominalizations_per_1000']}, "
+          f"words {b['words']} -> {af['words']}), colons {b['colons']} -> {af['colons']}; "
+          f"refused for a register rise: {len(register['refused'])}"
+          + (f" (p{', p'.join(str(n) for n in register['refused'])}: {', '.join(register['refused_for'])})"
+             if register["refused"] else ""))
 
     # The point of the exercise: did the pass move toward the assistant
     # register? Markers before -> after, same vocabulary as every report.
