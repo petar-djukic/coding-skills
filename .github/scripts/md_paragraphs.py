@@ -8,7 +8,7 @@ audits. Lifted out of match-voice's drive.py (GH-167) and kept here because
 filter-tells is the skill every other prose skill already imports from.
 
 Every body line is classified — prose, heading, figure, figure-caption, table,
-code, reference, blockquote, list, rule, blank, locked. The classification
+table-caption, code, reference, blockquote, list, rule, blank, locked. The classification
 tally is the audit consumers actually read: it answers "what did the parser
 decide to skip, and does that match the document" without reading the document.
 
@@ -66,6 +66,12 @@ _CATEGORY_TESTS = (
     ("figure", lambda s: s.startswith("![")),
     ("table", lambda s: s.startswith("|")),
     ("figure-caption", lambda s: s.startswith("**Figure")),
+    # Pandoc table captions (GH-465): "Table: ... {#tab:x}", or ": ..." when
+    # it carries a table label (a bare ": " line can be a definition-list
+    # entry). Read as prose, every rewrite driver sent them to a model, and
+    # one broke the S6 caption twice.
+    ("table-caption", lambda s: s.startswith("Table:")
+                                or (s.startswith(": ") and "{#tab:" in s)),
     ("reference", lambda s: bool(re.match(r"^\[\d+\]", s))),
     ("rule", lambda s: s == "---"),
     ("blockquote", lambda s: s.startswith(">")),

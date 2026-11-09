@@ -960,7 +960,8 @@ run_on_file() {
   local MD_TMP=""
   if [[ "$DISPLAY" == *.md ]]; then
     MD_TMP="$(mktemp)"
-    sed -E -e 's/^!\[.*$//' -e 's/^\*\*Figure .*$//' "$FILE" > "$MD_TMP"
+    sed -E -e 's/^!\[.*$//' -e 's/^\*\*Figure .*$//' -e 's/^Table: .*$//' \
+        -e 's/^: .*\{#tab:.*$//' "$FILE" > "$MD_TMP"
     FILE="$MD_TMP"
   fi
   ISSUES_FOUND=0

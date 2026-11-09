@@ -178,6 +178,9 @@ def extract_prose(text: str) -> str:
         s = line.strip()
         if re.match(r"^(Fig\.?|Figure|Table|TABLE|Algorithm|Listing)\s*\.?\s*[0-9IVX]", s):
             continue
+        # Pandoc table captions (GH-465), whatever their length.
+        if s.startswith("Table:") or (s.startswith(": ") and "{#tab:" in s):
+            continue
         if re.match(r"^\d+(\.\d+)*\.?\s+[A-Z]", s) and len(s.split()) <= 8 and not s.endswith((",", ";")):
             continue
 
