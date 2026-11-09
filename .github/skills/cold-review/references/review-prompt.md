@@ -1,5 +1,10 @@
 # Cold-review subagent prompt (the fixed contract, GH-207)
 
+Class 6, edit-talk, joined the list in GH-468: critic-apply's vocabulary
+gate (GH-440, GH-453) cannot see a rationale written in the subject's own
+words, and cold review is the reader that already compares every changed
+sentence with the baseline.
+
 Spawn a FRESH-context agent — one that has not seen the drafting or
 rewriting conversation — with only the material below. Maker is not
 checker: a model that just rewrote a paragraph is the worst judge of
@@ -37,6 +42,12 @@ meaning damage, in these classes:
 4. Hedges that change assertions — a calibrated "often" dropped from an
    empirical claim, or a hedge added to a flat validity statement.
 5. Constitution [CHECK] items no longer satisfied.
+6. Edit-talk — a sentence the CANDIDATE has and the BASELINE lacks that
+   describes the edit, the document, its rules, or its parts instead of
+   the subject: "The opener scopes the square to both columns it draws",
+   "as claimed by the SRD", "(cold review rejected its deletion)". It
+   states something the BASELINE never said, in the subject's own
+   vocabulary, so no word list catches it. Revert the paragraph.
 
 Your verdict vocabulary is closed. Answer with exactly one of:
 
