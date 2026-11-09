@@ -337,7 +337,8 @@ scan.
 `scripts/md_paragraphs.py` is the canonical markdown paragraph extractor for
 the prose skills, and lives here because filter-tells is what the others already
 import from. It classifies every body line — prose, heading, figure,
-figure-caption, table, code, reference, blockquote, list, rule, blank — and
+figure-caption, table, table-caption (pandoc `Table:` lines, GH-465), code,
+reference, blockquote, list, rule, blank — and
 returns prose blocks with the source line ranges a rewrite can be spliced back
 into. `match-voice/scripts/drive.py` imports it rather than carrying its own
 parser (GH-167); a sibling import works because every agent surface carries
