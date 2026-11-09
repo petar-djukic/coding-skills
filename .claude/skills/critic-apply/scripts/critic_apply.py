@@ -253,6 +253,12 @@ def rationale_leak(orig_clean, cand, instruction=""):
 
 def gate(orig_clean, cand, instruction=""):
     """Mechanical gate. Returns (ok, reason)."""
+    # One paragraph in, one paragraph out (GH-455). cold_review aligns
+    # baseline and candidate paragraph by paragraph and refuses unequal
+    # counts, so one rewrite that split its paragraph in three made cold
+    # review reject the whole S4 round-1 candidate, all 23 edits with it.
+    if len(re.split(r"\n[ \t]*\n", cand.strip())) > 1:
+        return False, "paragraph split (a rewrite must stay one paragraph)"
     leak = rationale_leak(orig_clean, cand, instruction)
     if leak:
         return False, leak
@@ -274,7 +280,8 @@ def build_prompt(par_clean, quote, instruction):
     return ("Rewrite the paragraph below, changing ONLY the quoted "
             "sentence, per the instruction. Keep every citation, number, "
             "and quoted phrase exactly. Return only the rewritten "
-            "paragraph, no preamble.\n"
+            "paragraph, as one paragraph with no blank line inside it, "
+            "no preamble.\n"
             f"Instruction: {instruction}\n"
             f'Sentence to change: "{quote}"\n'
             f"Paragraph:\n{par_clean}")

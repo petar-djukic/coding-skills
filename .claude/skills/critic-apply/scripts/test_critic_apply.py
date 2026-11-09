@@ -422,6 +422,25 @@ def test_plain_quote_finds_an_article_with_emphasis():
     print("  plain_quote_finds_an_article_with_emphasis: ok")
 
 
+# --- GH-455: a rewrite that splits its paragraph is kept by the gate ---
+
+def test_a_split_paragraph_is_kept_and_the_count_holds():
+    par = ("The engine reads the configuration and starts each agent in its own "
+           "workspace. Agents exchange messages over the mesh. The checker runs "
+           "before any agent starts and rejects an unsafe configuration.")
+    art = "# T\n\n" + par + "\n\nThe second paragraph stands alone.\n"
+    q = "Agents exchange messages over the mesh."
+    sh = sheet(conv(q, [("a", "Expand.", "x"), ("b", "Expand.", "y")]))
+    split = ("The engine reads the configuration and starts each agent in its own "
+             "workspace.\n\nAgents exchange messages over the mesh.\n\nThe checker "
+             "runs before any agent starts and rejects an unsafe configuration.")
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh), generate=lambda p: split)
+    assert recs[0]["status"] == "kept-gate" and "paragraph split" in recs[0]["cause"], recs
+    assert new == art
+    assert "one paragraph" in ca.build_prompt(par, q, "x")
+    print("  a_split_paragraph_is_kept_and_the_count_holds: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -446,4 +465,5 @@ if __name__ == "__main__":
     test_all_dependent_leaves_the_paragraph_byte_identical()
     test_marked_up_quote_with_unicode_hyphens_is_found_and_cut()
     test_plain_quote_finds_an_article_with_emphasis()
+    test_a_split_paragraph_is_kept_and_the_count_holds()
     print("all critic-apply tests passed")
