@@ -279,9 +279,11 @@ def gate(orig_clean, cand, instruction=""):
 def build_prompt(par_clean, quote, instruction):
     return ("Rewrite the paragraph below, changing ONLY the quoted "
             "sentence, per the instruction. Keep every citation, number, "
-            "and quoted phrase exactly. Return only the rewritten "
-            "paragraph, as one paragraph with no blank line inside it, "
-            "no preamble.\n"
+            "and quoted phrase exactly. Do not add a colon or an em dash "
+            "the paragraph does not already have; where a gloss or an "
+            "aside needs one, use a comma or a new sentence. Return only "
+            "the rewritten paragraph, as one paragraph with no blank line "
+            "inside it, no preamble.\n"
             f"Instruction: {instruction}\n"
             f'Sentence to change: "{quote}"\n'
             f"Paragraph:\n{par_clean}")
