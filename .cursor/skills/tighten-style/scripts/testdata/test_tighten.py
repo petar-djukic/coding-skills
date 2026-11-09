@@ -176,6 +176,17 @@ def main():
         assert outs["1"].count("because memory is limited.") == 6
         assert len(seen) == 12, seen
 
+        # 9. GH-458: a verify-clean candidate that raises nominalizations is
+        #    not spliced; the original stays.
+        def nominalizes(prompt, **kw):
+            return ("The cache has the capability of expiration of entries early "
+                    "owing to the limitation of memory on the smaller machines "
+                    "that run the nightly benchmark suite.")
+        o9 = os.path.join(tmp, "o9.md")
+        run_main(["--article", art, "--out", o9, "--retries", "0"], nominalizes)
+        kept9 = open(o9).read()
+        assert WORDY in kept9 and "capability of expiration" not in kept9, kept9
+
         print("test_tighten: all assertions passed (no server)")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

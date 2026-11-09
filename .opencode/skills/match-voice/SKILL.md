@@ -284,6 +284,7 @@ python3 <skill>/scripts/critique.py --original <paragraph-file> --candidate <can
 
 The verdict is structured, never prose — `{meaning_deltas, term_swaps,
 register_drift, banned_words, new_antithesis, new_tricolon,
+new_nominalization, new_colon (GH-458),
 quoted_span_changes, verdict: accept|repair|reject, source}`. The mechanical
 fields are regexes against the original (protected terms lost, filter-tells
 banned words introduced, antithesis or tricolon counts that rose, a quoted

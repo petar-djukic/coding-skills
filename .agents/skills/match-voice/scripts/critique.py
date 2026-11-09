@@ -40,6 +40,24 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import protected_terms as _pt  # noqa: E402
 
+_SHARED = os.path.normpath(os.path.join(HERE, "..", "..", "..", "scripts"))
+if _SHARED not in sys.path:
+    sys.path.insert(0, _SHARED)
+from register_markers import NOMINALIZATION as _NOMINALIZATION  # noqa: E402
+
+
+def register_rises(original, candidate):
+    """Register markers a candidate raised over its original (GH-458): the
+    S4 humanize chain took nominalizations from 61.2 to 75.8 per 1,000 words
+    and left colons at 9.5 per 500 against an author ceiling of 3.6, and no
+    stage gate looked at either. Returns {"nominalization": bool,
+    "colon": bool}."""
+    return {
+        "nominalization": len(_NOMINALIZATION.findall(candidate))
+                          > len(_NOMINALIZATION.findall(original)),
+        "colon": candidate.count(":") > original.count(":"),
+    }
+
 DEAI = os.path.normpath(os.path.join(HERE, "..", "..", "filter-tells", "scripts",
                                      "detect-lexical.sh"))
 
@@ -99,6 +117,7 @@ def mechanical(original, candidate, protected_terms=None, banned=None):
         "banned_words": new_banned,
         "new_antithesis": _count(_ANTITHESIS, candidate) > _count(_ANTITHESIS, original),
         "new_tricolon": _count(_TRICOLON, candidate) > _count(_TRICOLON, original),
+        **{f"new_{k}": v for k, v in register_rises(original, candidate).items()},
         "quoted_span_changes": quoted_lost,
     }
 
@@ -246,6 +265,10 @@ def render_constraints(crit):
         lines.append(f"Do not use the word {b!r}; the original did not.")
     if crit.get("new_antithesis"):
         lines.append("Do not stage a contrast the original did not have (no 'not X, but Y').")
+    if crit.get("new_nominalization"):
+        lines.append("Do not turn verbs into nouns (-tion, -ment, -ance, -ity): keep at most as many as the original has.")
+    if crit.get("new_colon"):
+        lines.append("Do not add a colon the original did not have; use a comma or a new sentence.")
     if crit.get("new_tricolon"):
         lines.append("Do not add a three-item list the original did not have.")
     for q in crit.get("quoted_span_changes") or []:

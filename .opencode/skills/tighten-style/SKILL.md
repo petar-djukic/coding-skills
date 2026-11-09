@@ -52,6 +52,8 @@ python3 <tighten-style>/scripts/check_style.py <file> [--json] [--hedge-policy z
 python3 <tighten-style>/scripts/tighten.py --article <file> [--venue <name>]   # the rewrite, via Ollama
 python3 <tighten-style>/scripts/tighten.py --article <file> --check-only   # plan without model calls
 python3 <tighten-style>/scripts/tighten.py --article <file> --jobs 1        # sequential; default 4 (TIGHTEN_STYLE_JOBS), same draft (GH-433)
+# A verify-clean candidate that raises the paragraph's nominalizations or colons is not
+# spliced (record field register_refused, GH-458): tightening must not bury verbs.
 ```
 
 1. **Run the checker** for the findings and the reading pass for the judgment
