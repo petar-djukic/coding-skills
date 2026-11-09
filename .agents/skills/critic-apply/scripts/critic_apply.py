@@ -289,12 +289,39 @@ def build_prompt(par_clean, quote, instruction):
             f"Paragraph:\n{par_clean}")
 
 
-def _decide(paras, t, protected, cheap):
+def _same_passage(a, b):
+    """converge.py's rule for "one passage", kept in step with it: similar
+    as wholes, or one quote of four or more words inside the other."""
+    na, nb = norm(a), norm(b)
+    if difflib.SequenceMatcher(None, na, nb, autojunk=False).ratio() >= THRESHOLD:
+        return True
+    short, long_ = sorted((na, nb), key=len)
+    return len(short.split()) >= 4 and short in long_
+
+
+def _edit_class(kind):
+    return "deletion" if kind in ("cut", "trim") else "rewrite"
+
+
+def _closed_hit(closed, quote, kind):
+    """The closed entry this target re-proposes, or None (GH-467).
+
+    A target is closed when cold review already rejected the same class of
+    change (a deletion, or a rewrite) on the same passage, whatever its
+    wording: in S6 a deletion rejected in round 1 came back in other words
+    in round 2, was applied, and was rejected again."""
+    for c in closed:
+        if c.get("kind") == _edit_class(kind) and _same_passage(c.get("quote", ""), quote):
+            return c
+    return None
+
+
+def _decide(paras, t, protected, cheap, closed=()):
     """The rule half of the policy for one target, no model involved.
 
     Returns (record, plan). plan is None when the rules settle the target;
     otherwise (paragraph number, kind, data) with kind cut, trim or rewrite."""
-    rec = {"quote": t["quote"][:80],
+    rec = {"quote": t["quote"][:80], "target_quote": t["quote"],
            "critics": sorted({e["critic"] for e in t["entries"]})}
     n = find_paragraph(paras, t["quote"])
     rec["paragraph"] = n
@@ -320,15 +347,24 @@ def _decide(paras, t, protected, cheap):
         rec["status"] = "declined-constitution"
         rec["cause"] = f"protected span: {hit[:60]}"
         return rec, None
-    if is_cut:
-        return rec, (n, "cut", None)
     trims = [b for b in bodies if deletion_only(t["quote"], b)]
-    if trims and len(trims) == len(bodies):
-        return rec, (n, "trim", max(trims, key=lambda b: len(WORD.findall(b))))
-    # A remedy conflict without a CUT is still one shared finding — the
-    # instruction is the why.
-    return rec, (n, "rewrite", next((e["why"] for e in t["entries"] if e["why"]),
-                                    t["entries"][0]["body"]))
+    if is_cut:
+        plan = (n, "cut", None)
+    elif trims and len(trims) == len(bodies):
+        plan = (n, "trim", max(trims, key=lambda b: len(WORD.findall(b))))
+    else:
+        # A remedy conflict without a CUT is still one shared finding — the
+        # instruction is the why.
+        plan = (n, "rewrite", next((e["why"] for e in t["entries"] if e["why"]),
+                                   t["entries"][0]["body"]))
+    rec["kind"] = _edit_class(plan[1])
+    hit = _closed_hit(closed, t["quote"], plan[1])
+    if hit:
+        rec["status"] = "declined-closed"
+        rec["cause"] = (f"cold review rejected this {rec['kind']} on this passage"
+                        f"{' in round ' + str(hit['round']) if hit.get('round') else ''}")
+        return rec, None
+    return rec, plan
 
 
 def _content_words(text):
@@ -480,7 +516,7 @@ def _run_chain(par_text, steps, generate):
 
 
 def decide_and_apply(article_text, targets, generate=None,
-                     protected=(), cheap=frozenset(), jobs=4):
+                     protected=(), cheap=frozenset(), jobs=4, closed=()):
     """The whole policy. Returns (new_text, records).
 
     Rules settle each target first, with no model call. The surviving
@@ -491,7 +527,7 @@ def decide_and_apply(article_text, targets, generate=None,
     paras = parsed.paragraphs
     records, chains = [], {}
     for t in targets:
-        rec, plan = _decide(paras, t, protected, cheap)
+        rec, plan = _decide(paras, t, protected, cheap, closed)
         records.append(rec)
         if plan:
             n, kind, data = plan
@@ -545,6 +581,9 @@ def main():
     ap.add_argument("--sheet", required=True,
                     help="converge.py sheet (<stem>.critic-sheet.md)")
     ap.add_argument("--out", help="default: <article stem>.applied.md")
+    ap.add_argument("--closed", help="JSON list of {quote, kind, round}: "
+                    "changes cold review already rejected; a target of the "
+                    "same kind on the same passage is declined (GH-467)")
     ap.add_argument("--protected", help="file of verbatim spans the "
                     "constitution protects; one per line")
     ap.add_argument("--cheap-paragraphs",
@@ -582,9 +621,10 @@ def main():
                 kw["endpoint"] = a.endpoint
             return _rw.generate(prompt, **kw)
 
+    closed = json.load(open(a.closed, encoding="utf-8")) if a.closed else []
     new_text, records = decide_and_apply(
         text, targets, generate=generate, protected=protected, cheap=cheap,
-        jobs=a.jobs)
+        jobs=a.jobs, closed=closed)
 
     out = a.out or os.path.splitext(a.article)[0] + ".applied.md"
     if not a.dry_run:

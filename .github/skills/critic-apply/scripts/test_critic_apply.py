@@ -449,6 +449,53 @@ def test_prompt_states_the_colon_and_dash_budget():
     print("  prompt_states_the_colon_and_dash_budget: ok")
 
 
+# --- GH-467: a change cold review rejected stays rejected, in any wording ---
+
+S6_SENT = ("Runtime statements dictate what an instance does once it runs, while "
+           "population statements govern how many instances exist.")
+S6_PAR = S6_SENT + " The operators read the population report every morning before the rollout."
+
+
+def test_a_reworded_rejected_deletion_is_declined():
+    art = "# T\n\n" + S6_PAR + "\n"
+    closed = [{"quote": S6_SENT, "kind": "deletion", "round": 1}]
+    shorter = "Runtime statements dictate what an instance does once it runs"
+    sh = sheet(conv(shorter, [("a", "CUT", "redundant"), ("b", "CUT", "restates")]))
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh), closed=closed)
+    assert recs[0]["status"] == "declined-closed" and "round 1" in recs[0]["cause"], recs
+    assert new == art
+    print("  a_reworded_rejected_deletion_is_declined: ok")
+
+
+def test_a_different_kind_of_change_on_a_closed_passage_applies():
+    art = "# T\n\n" + S6_PAR + "\n"
+    closed = [{"quote": S6_SENT, "kind": "deletion", "round": 1}]
+    sh = sheet(conv(S6_SENT, [("a", "Plainer.", "x"), ("b", "Plainer.", "y")]))
+    gen = lambda p: p.split("Paragraph:\n", 1)[1].replace(
+        "dictate what an instance does once it runs", "say what a running instance does")
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh), generate=gen, closed=closed)
+    assert recs[0]["status"] == "applied-rewrite", recs
+    assert recs[0]["kind"] == "rewrite" and recs[0]["target_quote"] == S6_SENT
+    print("  a_different_kind_of_change_on_a_closed_passage_applies: ok")
+
+
+def test_closed_file_on_the_cli():
+    import json, subprocess, tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        art = os.path.join(tmp, "a.md")
+        open(art, "w").write("# T\n\n" + S6_PAR + "\n")
+        sh = os.path.join(tmp, "a.critic-sheet.md")
+        open(sh, "w").write(sheet(conv(S6_SENT, [("a", "CUT", "x"), ("b", "CUT", "y")])))
+        cl = os.path.join(tmp, "closed.json")
+        json.dump([{"quote": S6_SENT, "kind": "deletion", "round": 2}], open(cl, "w"))
+        r = subprocess.run([sys.executable, os.path.join(HERE, "critic_apply.py"),
+                            "--article", art, "--sheet", sh, "--closed", cl, "--dry-run"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert "declined-closed: 1" in r.stdout, r.stdout
+    print("  closed_file_on_the_cli: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -475,4 +522,7 @@ if __name__ == "__main__":
     test_plain_quote_finds_an_article_with_emphasis()
     test_a_split_paragraph_is_kept_and_the_count_holds()
     test_prompt_states_the_colon_and_dash_budget()
+    test_a_reworded_rejected_deletion_is_declined()
+    test_a_different_kind_of_change_on_a_closed_passage_applies()
+    test_closed_file_on_the_cli()
     print("all critic-apply tests passed")
