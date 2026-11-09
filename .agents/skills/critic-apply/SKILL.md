@@ -45,7 +45,10 @@ rules decide, and the rules are arguable because they are deterministic.
   critics' *why*, sent through the rewrite transport
   (`CRITIC_APPLY_MODEL`, default `cohere:command-a-03-2025`) — persona
   prose is never spliced; it is guidance at most.
-- **The gate**: number multiset (citations masked first), citation
+- **The gate**: one paragraph out for one paragraph in (a candidate with
+  a blank line inside it is kept: cold review aligns paragraph by paragraph,
+  and one split made it reject a whole candidate, GH-455), number multiset
+  (citations masked first), citation
   multiset (`[@key]` and `[n]`), em-dash and colon counts capped at the
   original's, candidate length within 0.5–1.35× of the original, and no
   editorial rationale: critic or pipeline vocabulary the original did not
