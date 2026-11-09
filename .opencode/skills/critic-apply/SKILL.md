@@ -79,6 +79,12 @@ rules decide, and the rules are arguable because they are deterministic.
   cut is recorded `kept-gate` with the rewrite named as the cause, and the
   paragraph's chain is re-run without it (model answers are cached, so
   only prompts whose paragraph text changed are asked again).
+- **Closed changes stay closed** (`--closed FILE`, GH-467). The file is a
+  JSON list of `{quote, kind, round}` for changes cold review rejected. A
+  target of the same kind (a deletion, or a rewrite) on the same passage, by
+  converge's passage rule, is `declined-closed`, whatever its wording. The
+  log records each target's full `target_quote` and `kind`, which is what a
+  caller builds the list from.
 - **Paragraphs run concurrently** (`--jobs`, default 4; 1 is sequential).
   Each model call still carries one paragraph and one sentence, and the
   output does not depend on `--jobs`.

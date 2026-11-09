@@ -112,9 +112,13 @@ const APPLY = {
     declined: { type: 'integer' },
     unapplied_convergent: { type: 'array', items: { type: 'string' } },
     applied_targets: { type: 'array', items: { type: 'string' } },
+    applied_quotes: {
+      type: 'array',
+      items: { type: 'object', properties: { quote: { type: 'string' }, kind: { type: 'string', enum: ['deletion', 'rewrite'] }, paragraph: { type: 'integer' } }, required: ['quote', 'kind', 'paragraph'] },
+    },
     committed_sha: { type: 'string' },
   },
-  required: ['candidate_path', 'applied', 'kept', 'declined', 'unapplied_convergent', 'applied_targets', 'committed_sha'],
+  required: ['candidate_path', 'applied', 'kept', 'declined', 'unapplied_convergent', 'applied_targets', 'applied_quotes', 'committed_sha'],
 }
 
 const COLD = {
@@ -122,9 +126,10 @@ const COLD = {
   properties: {
     verdict: { type: 'string', enum: ['ship as-is', 'ship with reverts', 'reject candidate'] },
     reverts: { type: 'array', items: { type: 'string' } },
+    reverted_paragraphs: { type: 'array', items: { type: 'integer' } },
     committed_sha: { type: 'string' },
   },
-  required: ['verdict', 'reverts', 'committed_sha'],
+  required: ['verdict', 'reverts', 'reverted_paragraphs', 'committed_sha'],
 }
 
 const ROSS = {
@@ -294,7 +299,7 @@ Read ${SK}/cold-review/SKILL.md and its prompt template ${SK}/cold-review/refere
 - reject candidate: restore ${ART} to the baseline exactly (git show ${candidateSha}^:${ART}).
 High-value targets: numbers, citations, quotations, statement ids (R1.2, AC3), sentences left as fragments, and these protected spans:
 ${list(pre.protected_spans)}
-${COMMIT(`cold-review: <slug> (round ${round}, ${stage}: <verdict>)`)} For reverts, one body line per reverted paragraph and why; for a rejection, the reasons. The candidate stays in history at ${candidateSha}, so git show reads what was tried. Return the verdict, each revert as one line, and HEAD after your commit. ${HYGIENE}`,
+${COMMIT(`cold-review: <slug> (round ${round}, ${stage}: <verdict>)`)} For reverts, one body line per reverted paragraph and why; for a rejection, the reasons. The candidate stays in history at ${candidateSha}, so git show reads what was tried. Return the verdict, each revert as one line, reverted_paragraphs (the 1-based prose paragraph numbers you reverted, as cold_review.py numbers them; for a rejection, every paragraph the candidate changed), and HEAD after your commit. ${HYGIENE}`,
     { label, phase: 'Review', schema: COLD })
 }
 
@@ -325,12 +330,24 @@ let lastRossOpen = []
 // S2 run re-proposed, re-applied and re-reverted the same three edits in
 // every round because the next panel never heard about the reverts.
 const rejected = []
+// The same rejections as data critic-apply enforces (GH-467): the prompt
+// above is advice the panel can reword around, and in S6 a rejected deletion
+// came back in other words, was applied, and was rejected again.
+const closedTargets = []
+const closedFlag = () => (closedTargets.length
+  ? `Write this JSON list to a temporary file and pass it to critic-apply with --closed (changes cold review already rejected; critic-apply declines the same kind of change on the same passage): ${JSON.stringify(closedTargets)}`
+  : '')
 const closeRejected = (review, applyResult, round, stage) => {
   if (!review || !applyResult) return
   const lines = review.verdict === 'reject candidate'
     ? (applyResult.applied_targets || [])
     : (review.reverts || [])
   for (const line of lines) rejected.push(`rejected by cold review in round ${round} (${stage}), do not re-propose: ${line}`)
+  const reverted = review.verdict === 'reject candidate' ? null : new Set(review.reverted_paragraphs || [])
+  if (review.verdict === 'ship as-is') return
+  for (const q of applyResult.applied_quotes || []) {
+    if (!reverted || reverted.has(q.paragraph)) closedTargets.push({ quote: q.quote, kind: q.kind, round })
+  }
 }
 let stable = false
 let lastSheet = null
@@ -356,8 +373,9 @@ ${NO_PROSE}`,
 Pass as protected spans (write them to a temporary spans file):
 ${list(pre.protected_spans)}
 Pass --cheap-paragraphs ${outline.cheap_paragraphs.join(',') || '(none)'} from reverse-outline's rank.
+${closedFlag()}
 Write the skill's candidate over ${ART}: cold review judges it next, as a commit, so a rejected attempt stays in history. ${COMMIT(`critic-apply: <slug> (round ${round}, candidate)`)} The body carries the applied/kept/declined counts and one line per target not applied, with its status.
-Return the article path as candidate_path, the counts, every convergent target that was not applied (first words plus the reason), every target that was applied (first words plus the change, one line each) as applied_targets, and HEAD after your commit as committed_sha.
+Return the article path as candidate_path, the counts, every convergent target that was not applied (first words plus the reason), every target that was applied (first words plus the change, one line each) as applied_targets, every target the log records with an applied- status as applied_quotes (its target_quote, its kind, and its paragraph number) from the skill's .critic-apply.json log, and HEAD after your commit as committed_sha.
 Then delete the three critic reports and the sheet. ${NO_PROSE}`,
     { label: `r${round}: critic-apply`, phase: 'Review', schema: APPLY })
   if (!applied) return { status: 'failed', stage: `round ${round} critic-apply`, rounds }
@@ -382,10 +400,11 @@ Write the report to ${STEM}.critic-iceberg-${leg}.md, delete your reading copy, 
   const iceberg = await agent(`Apply the Iceberg pass to ${ART}. Merge ${STEM}.critic-iceberg-a.md and ${STEM}.critic-iceberg-b.md with ${SK}/critic-panel/scripts/converge.py --roster iceberg-a,iceberg-b --out ${STEM}.iceberg-sheet.md.
 ${icebergKeep ? `Before applying, check every convergent cut against the keep list below. A cut that removes a clause the keep list names, or that removes a statement id (R1.2, AC3), is reported, not applied: delete it from the sheet and list it among the unapplied targets with the reason "kept: <the focus item, rule, or panel answer>".
 ${icebergKeep}
-` : ''}Then run the critic-apply skill (${SK}/critic-apply/SKILL.md) on the sheet with these protected spans:
+` : ''}Then run the critic-apply skill (${SK}/critic-apply/SKILL.md) on the sheet${closedTargets.length ? ', passing --closed as below,' : ''} with these protected spans:
 ${list(pre.protected_spans)}
+${closedFlag()}
 Convergent cuts and deletion-only trims apply directly with no model call; report any target that could not be placed (for example a span inside a list item, which critic-apply does not locate) instead of placing it by hand. Write the skill's candidate over ${ART}: cold review judges it next, as a commit. ${COMMIT(`iceberg: <slug> (round ${round}, candidate)`)} The body carries each leg's suggestion count, the applied/kept/declined counts, and one line per cut not applied, with its reason.
-Return the article path as candidate_path, the counts, every convergent target left unapplied (first words plus the reason), every cut that was applied (first words, one line each) as applied_targets, and HEAD after your commit as committed_sha. ${HYGIENE}`,
+Return the article path as candidate_path, the counts, every convergent target left unapplied (first words plus the reason), every cut that was applied (first words, one line each) as applied_targets, every target the log records with an applied- status as applied_quotes (its target_quote, its kind, and its paragraph number) from the skill's .critic-apply.json log, and HEAD after your commit as committed_sha. ${HYGIENE}`,
     { label: `r${round}: iceberg apply`, phase: 'Review', schema: APPLY, effort: 'low' })
   let icebergCold = null
   if (iceberg && iceberg.applied > 0) {
@@ -485,5 +504,6 @@ return {
   final_read: finalRead ? { convergent: finalRead.convergent, focus_answers: finalRead.focus_answers, classes: finalRead.classes } : null,
   residue,
   rejected,
+  closed_targets: closedTargets,
   record,
 }

@@ -134,7 +134,9 @@ the focus list, they were answered in round 1 and dropped after. Every edit cold
 of a candidate it rejected, joins a closed list the panel and the
 Iceberg legs are told not to re-propose, for the rest of the run
 (GH-438): without it, one run proposed, applied and reverted the same
-three edits in all three rounds. The loop ends when a round changes nothing: that round
+three edits in all three rounds. The list is also enforced: each rejected
+change goes to critic-apply as data (`--closed`), which declines the same
+kind of change on the same passage however the panel rewords it (GH-467). The loop ends when a round changes nothing: that round
 was a read of the final text. At the round cap, one read-only panel
 pass runs on the final text, so the report always describes what ships.
 
