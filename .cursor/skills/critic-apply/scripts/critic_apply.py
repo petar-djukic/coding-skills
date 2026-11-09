@@ -279,7 +279,9 @@ def gate(orig_clean, cand, instruction=""):
 def build_prompt(par_clean, quote, instruction):
     return ("Rewrite the paragraph below, changing ONLY the quoted "
             "sentence, per the instruction. Keep every citation, number, "
-            "and quoted phrase exactly. Do not add a colon or an em dash "
+            "and quoted phrase exactly. Do not add a definition, gloss, or "
+            "expansion of a term the paragraph does not already define. "
+            "Do not add a colon or an em dash "
             "the paragraph does not already have; where a gloss or an "
             "aside needs one, use a comma or a new sentence. Return only "
             "the rewritten paragraph, as one paragraph with no blank line "
@@ -314,6 +316,25 @@ def _closed_hit(closed, quote, kind):
         if c.get("kind") == _edit_class(kind) and _same_passage(c.get("quote", ""), quote):
             return c
     return None
+
+
+# A fix that adds a definition (GH-469). The rewrite model has no source for
+# what the author's terms mean: one S6 pass expanded LAM as "Lean Agent
+# Model". Such a finding is the author's to answer, so it is declined and
+# reported, never rewritten.
+_DEFINES = re.compile(
+    r"\b(gloss(?:es|ed|ing)?|unglossed|undefined|define[sd]?|defining|definition|"
+    r"introduce (?:the|this|that) (?:term|word|acronym|name)|"
+    r"(?:say|explain|state) what (?:an? |the )?\w+(?: \w+)? (?:is|are|means?)|"
+    r"spell (?:it |this |the \w+ )?out|expand (?:the |this )?(?:acronym|abbreviation)|"
+    r"(?:before|at) (?:its )?first use)\b",
+    re.I)
+
+
+def _asks_for_definition(t):
+    text = " ".join(f"{e.get('body', '')} {e.get('why', '')}" for e in t["entries"])
+    m = _DEFINES.search(text)
+    return m.group(0) if m else None
 
 
 def _decide(paras, t, protected, cheap, closed=()):
@@ -358,6 +379,13 @@ def _decide(paras, t, protected, cheap, closed=()):
         plan = (n, "rewrite", next((e["why"] for e in t["entries"] if e["why"]),
                                    t["entries"][0]["body"]))
     rec["kind"] = _edit_class(plan[1])
+    if plan[1] == "rewrite":
+        asks = _asks_for_definition(t)
+        if asks:
+            rec["status"] = "declined-author-definition"
+            rec["cause"] = (f"the fix adds a definition (\"{asks}\"); "
+                            "needs the author's definition")
+            return rec, None
     hit = _closed_hit(closed, t["quote"], plan[1])
     if hit:
         rec["status"] = "declined-closed"

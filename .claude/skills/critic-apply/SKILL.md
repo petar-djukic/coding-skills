@@ -88,6 +88,11 @@ rules decide, and the rules are arguable because they are deterministic.
   converge's passage rule, is `declined-closed`, whatever its wording. The
   log records each target's full `target_quote` and `kind`, which is what a
   caller builds the list from.
+- **A fix that adds a definition is declined** (`declined-author-definition`,
+  GH-469). When the critics' fix asks to gloss, define, introduce or expand
+  a term, no model is asked: it has no source for the author's meaning, and
+  one run expanded LAM as "Lean Agent Model". The rewrite prompt also says
+  never to add a definition the paragraph lacks.
 - **Paragraphs run concurrently** (`--jobs`, default 4; 1 is sequential).
   Each model call still carries one paragraph and one sentence, and the
   output does not depend on `--jobs`.

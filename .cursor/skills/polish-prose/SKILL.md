@@ -150,6 +150,15 @@ Humanize runs once: re-running the chain on gated prose degraded it in
 measurement (0.621 to 0.579 human, 2026-08-22), and the caller decides
 any further cycle from the seed-reach report.
 
+## Definitions are yours
+
+No stage writes a definition (GH-469). When a critic or the ross read
+flags a term used before it is defined, critic-apply declines the fix as
+`declined-author-definition` instead of asking a model to invent a
+meaning: one run expanded LAM as "Lean Agent Model". The term stays in
+the residue, and the report lists these items as `author_definitions`,
+the definitions only the author can write.
+
 ## The focus brief
 
 Generic persona briefs miss what the author already knows to look for;

@@ -505,5 +505,9 @@ return {
   residue,
   rejected,
   closed_targets: closedTargets,
+  // Terms the run will not define (GH-469): critic-apply declines a fix that
+  // adds a definition, because the model has no source for the author's
+  // meaning. These are the author's to answer.
+  author_definitions: residue.filter((r) => /author's definition|declined-author-definition/i.test(r)),
   record,
 }

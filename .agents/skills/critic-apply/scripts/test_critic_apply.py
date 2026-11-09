@@ -328,7 +328,7 @@ def test_plain_rewrite_and_existing_vocabulary_pass():
 def test_rationale_leak_is_kept_gate_in_a_run():
     q = "Fault management in networks is the TM Forum's oldest process area."
     art = "# T\n\n" + P1 + "\n"
-    sh = sheet(conv(q, [("a", "Gloss it.", "gloss TM Forum"), ("b", "Gloss it.", "gloss TM Forum")]))
+    sh = sheet(conv(q, [("a", "Plainer.", "say it plainly"), ("b", "Plainer.", "say it plainly")]))
     new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh),
         generate=lambda p: "The gloss tells a modelling reader who TM Forum is. " + P1.split(". ", 1)[1])
     assert recs[0]["status"] == "kept-gate" and "editorial" in recs[0]["cause"], recs
@@ -350,8 +350,8 @@ P3_OTHER = "The operators read the dashboard daily."
 def _p3_sheet():
     move = ("Surveys collect dozens of definitions; here an agent is software "
             "that handles inputs not fully known at design time.")
-    return sheet(conv(P3_REWRITE, [("a", move, "lead with the definition"),
-                                   ("b", move, "definition first")]) +
+    return sheet(conv(P3_REWRITE, [("a", move, "lead with the working sense"),
+                                   ("b", move, "working sense first")]) +
                  conv(P3_DEF, [("a", "CUT", "moved up"), ("b", "CUT", "moved up")]) +
                  conv(P3_OTHER, [("a", "CUT", "off topic"), ("b", "CUT", "off topic")]))
 
@@ -496,6 +496,37 @@ def test_closed_file_on_the_cli():
     print("  closed_file_on_the_cli: ok")
 
 
+# --- GH-469: a fix that adds a definition is the author's, not a rewrite's ---
+
+LAM_PAR = ("A decider driven by a LAM can propose any change, but the change takes "
+           "effect only through the agent-profile that holds the deployment authority.")
+
+
+def test_a_gloss_fix_is_declined_for_the_author():
+    art = "# T\n\n" + LAM_PAR + "\n"
+    called = []
+    for fix in ("Gloss LAM at first use.", "Define the decider before using it.",
+                "Expand the acronym.", "Say what a LAM is."):
+        sh = sheet(conv(LAM_PAR, [("claude", fix, "reader cannot know"), ("gemma", fix, "unglossed")]))
+        new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh), generate=lambda p: called.append(p) or "x")
+        assert recs[0]["status"] == "declined-author-definition", (fix, recs)
+        assert "needs the author's definition" in recs[0]["cause"]
+        assert new == art
+    assert called == [], "no model is asked to invent a definition"
+    print("  a_gloss_fix_is_declined_for_the_author: ok")
+
+
+def test_other_rewrites_and_cuts_still_apply():
+    art = "# T\n\n" + LAM_PAR + " The operators read the log daily.\n"
+    sh = sheet(conv(LAM_PAR, [("a", "Plainer.", "say it plainly"), ("b", "Plainer.", "plain")]) +
+               conv("The operators read the log daily.", [("a", "CUT", "off topic"), ("b", "CUT", "x")]))
+    gen = lambda p: p.split("Paragraph:\n", 1)[1].replace("can propose any change", "may propose any change")
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh), generate=gen)
+    assert [r["status"] for r in recs] == ["applied-rewrite", "applied-deletion"], recs
+    assert "Do not add a definition" in ca.build_prompt(LAM_PAR, LAM_PAR, "x")
+    print("  other_rewrites_and_cuts_still_apply: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -525,4 +556,6 @@ if __name__ == "__main__":
     test_a_reworded_rejected_deletion_is_declined()
     test_a_different_kind_of_change_on_a_closed_passage_applies()
     test_closed_file_on_the_cli()
+    test_a_gloss_fix_is_declined_for_the_author()
+    test_other_rewrites_and_cuts_still_apply()
     print("all critic-apply tests passed")
