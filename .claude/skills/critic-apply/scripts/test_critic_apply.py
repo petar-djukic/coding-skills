@@ -441,6 +441,14 @@ def test_a_split_paragraph_is_kept_and_the_count_holds():
     print("  a_split_paragraph_is_kept_and_the_count_holds: ok")
 
 
+# --- GH-456: the prompt states the budget the gate enforces ---
+
+def test_prompt_states_the_colon_and_dash_budget():
+    p = ca.build_prompt("A paragraph.", "A paragraph.", "gloss it")
+    assert "colon" in p and "em dash" in p and "comma or a new sentence" in p, p
+    print("  prompt_states_the_colon_and_dash_budget: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -466,4 +474,5 @@ if __name__ == "__main__":
     test_marked_up_quote_with_unicode_hyphens_is_found_and_cut()
     test_plain_quote_finds_an_article_with_emphasis()
     test_a_split_paragraph_is_kept_and_the_count_holds()
+    test_prompt_states_the_colon_and_dash_budget()
     print("all critic-apply tests passed")
