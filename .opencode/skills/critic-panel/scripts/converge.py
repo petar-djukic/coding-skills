@@ -69,18 +69,33 @@ _BOLD_LABEL = re.compile(
     r"^(\s*(?:[-*]\s+|\d+[.)]\s+)?)\*\*(" + "|".join(_LABELS) + r")(:?)\*\*:?",
     re.M)
 _BOLD_HEADING = re.compile(r"^(#{2,3} +)\*\*(.+?)\*\*\s*$", re.M)
+# gpt-oss also bolded the hashes themselves: "**## Findings**" (GH-454).
+_BOLD_HASHES = re.compile(r"^\*\*(#{2,3})\s*(.+?)(?:\*\*)?\s*$", re.M)
+# Emphasis markers and the typographic variants of hyphens and quote marks:
+# a merged quote carrying them reached critic-apply unfindable in an article
+# written with plain ASCII (GH-454).
+_EMPHASIS = re.compile(r"\*\*|__|(?<![\w*])\*(?=\S)|(?<=\S)\*(?![\w*])")
+_HYPHENS = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2212"), "-")
+_QUOTES = {ord("\u201c"): '"', ord("\u201d"): '"', ord("\u2018"): "'", ord("\u2019"): "'"}
+
+
+def plain(s):
+    """Emphasis markers dropped, hyphen and quote-mark variants as ASCII."""
+    return _EMPHASIS.sub("", s).translate(_HYPHENS).translate(_QUOTES)
 _WRAP = "\"'`\u201c\u201d\u2018\u2019"
 
 
 def normalize_report(text):
     """Bold headings and bold field labels read as plain ones."""
+    text = _BOLD_HASHES.sub(lambda m: f"{m.group(1)} {m.group(2)}", text)
     text = _BOLD_HEADING.sub(lambda m: m.group(1) + m.group(2), text)
     return _BOLD_LABEL.sub(lambda m: f"{m.group(2)}:", text)
 
 
 def clean_quote(q):
-    """Strip quote marks and backticks wrapping a quote, as a whole."""
-    q = q.strip()
+    """Strip quote marks and backticks wrapping a quote, as a whole, and any
+    emphasis markers inside it: the quote is text to find, not markup."""
+    q = _EMPHASIS.sub("", q).strip()
     while len(q) >= 2 and q[0] in _WRAP and q[-1] in _WRAP:
         q = q[1:-1].strip()
     return q
@@ -181,7 +196,7 @@ def parse(path):
 
 
 def norm(s):
-    return " ".join(s.lower().split())
+    return " ".join(plain(s).lower().split())
 
 
 def group(items_or_reports):

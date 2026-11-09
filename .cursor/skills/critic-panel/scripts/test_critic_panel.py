@@ -740,6 +740,27 @@ class LooseLegFormatTest(unittest.TestCase):
         self.assertEqual(r["items"][0]["quote"], self.SENT)
         self.assertEqual(r["items"][0]["Fix"], "Gloss it.")
 
+    def test_bold_hashes_headings_parse(self):
+        """GH-454: gpt-oss bolded the hashes too, "**## Findings**"."""
+        path = os.path.join(self.t, "gptoss.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("**## Diagnosis**\nd\n\n**## Findings**\n### 1\n"
+                    f"Passage: {self.SENT}\nFinding: Unglossed.\nFix: Gloss it.\n\n"
+                    "**## Verdict**\nv\n")
+        r = converge.parse(path)
+        self.assertIsNone(converge.unparseable(r))
+        self.assertEqual(r["items"][0]["quote"], self.SENT)
+
+    def test_markup_and_hyphen_variants_merge_and_are_cleaned(self):
+        a = _verdict(self.t, "claude", "d", [(self.SENT, "Unglossed.", "Gloss it.")], "v")
+        marked = self.SENT.replace("harness", "**harness**").replace("trained", "*trained*")
+        b = _verdict(self.t, "mistral", "d", [(marked, "Unglossed.", "Gloss.")], "v")
+        self.assertEqual(converge.parse(b)["items"][0]["quote"], self.SENT)
+        hy = _verdict(self.t, "glm", "d", [("The run\u2011time engine starts every agent in the mesh.", "x", "y")], "v")
+        ascii_ = _verdict(self.t, "kimi", "d", [("The run-time engine starts every agent in the mesh.", "x", "y")], "v")
+        self.assertEqual(len(self._conv(a, b)), 1)
+        self.assertEqual(len(self._conv(hy, ascii_)), 1)
+
     def test_unrelated_passages_stay_apart(self):
         a = _verdict(self.t, "claude", "d", [(self.SENT, "Unglossed.", "Gloss it.")], "v")
         b = _verdict(self.t, "glm", "d", [("The operators read the dashboard every morning.", "Flat.", "Cut.")], "v")
