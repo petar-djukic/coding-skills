@@ -200,9 +200,10 @@ that the tool had contributed nothing (GH-107). A report parsing to nothing
 now names itself and stops the merge.
 
 Within those names, `converge.py` tolerates how model legs actually write
-(GH-442): bold headings and bold field labels (`## **Findings**`,
-`**Passage:**`) read as plain ones; quote marks or backticks wrapping a
-whole quote are stripped; and two quotes point at one passage when they
+(GH-442, GH-454): bold headings and bold field labels (`## **Findings**`,
+`**## Findings**`, `**Passage:**`) read as plain ones; quote marks or
+backticks wrapping a whole quote, and emphasis markers inside it, are
+stripped; hyphen and quote-mark variants match their ASCII forms; and two quotes point at one passage when they
 are similar as wholes, when a quote of four or more words sits inside the
 other, or when one is elided with `...` and its pieces occur in order in
 the other. A group is rendered under its fullest unelided quote, since

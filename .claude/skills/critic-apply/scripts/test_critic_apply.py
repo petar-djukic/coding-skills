@@ -394,6 +394,34 @@ def test_all_dependent_leaves_the_paragraph_byte_identical():
     print("  all_dependent_leaves_the_paragraph_byte_identical: ok")
 
 
+# --- GH-454: quotes with emphasis markup or hyphen variants are found ---
+
+ASCII_PAR = ("The mesh is a well-formed graph of agents, and the checker "
+             "verifies it before the run-time engine starts any of them.")
+
+
+def test_marked_up_quote_with_unicode_hyphens_is_found_and_cut():
+    art = "# T\n\n" + ASCII_PAR + " The operators read the log daily.\n"
+    q = ("The mesh is a **well\u2011formed** graph of agents, and the checker "
+         "verifies it before the run\u2010time engine starts any of them.")
+    sh = sheet(conv(q, [("a", "CUT", "x"), ("b", "CUT", "y")]))
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh))
+    assert recs[0]["status"] == "applied-deletion", recs
+    assert "well-formed" not in new and "The operators read the log daily." in new
+    print("  marked_up_quote_with_unicode_hyphens_is_found_and_cut: ok")
+
+
+def test_plain_quote_finds_an_article_with_emphasis():
+    par = "The **mesh** is a well-formed graph of agents that the checker verifies before any run."
+    art = "# T\n\n" + par + " The operators read the log daily.\n"
+    q = "The mesh is a well-formed graph of agents that the checker verifies before any run."
+    sh = sheet(conv(q, [("a", "CUT", "x"), ("b", "CUT", "y")]))
+    new, recs = ca.decide_and_apply(art, ca.parse_sheet(sh))
+    assert recs[0]["status"] == "applied-deletion", recs
+    assert "**mesh**" not in new
+    print("  plain_quote_finds_an_article_with_emphasis: ok")
+
+
 if __name__ == "__main__":
     test_convergent_applied_and_marker_roundtrip()
     test_split_panel_skipped()
@@ -416,4 +444,6 @@ if __name__ == "__main__":
     test_cut_paired_with_a_kept_rewrite_is_kept()
     test_cut_paired_with_an_applied_rewrite_lands()
     test_all_dependent_leaves_the_paragraph_byte_identical()
+    test_marked_up_quote_with_unicode_hyphens_is_found_and_cut()
+    test_plain_quote_finds_an_article_with_emphasis()
     print("all critic-apply tests passed")

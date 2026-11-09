@@ -51,8 +51,24 @@ NUM = re.compile(r"\d[\d,\.]*")
 CITE = re.compile(r"\[@[^\]\s]+\]|\[\d{1,3}\]")
 
 
+_EMPHASIS = re.compile(r"\*\*|__|(?<![\w*])\*(?=\S)|(?<=\S)\*(?![\w*])")
+_HYPHEN_CHARS = "-\u2010\u2011\u2012\u2013\u2212"
+_QUOTE_CLASS = {'"': '["\u201c\u201d]', "\u201c": '["\u201c\u201d]', "\u201d": '["\u201c\u201d]',
+                "'": "['\u2018\u2019]", "\u2018": "['\u2018\u2019]", "\u2019": "['\u2018\u2019]"}
+
+
+def plain(s):
+    """Emphasis markers dropped, hyphen and quote-mark variants as ASCII
+    (GH-454): a ross quote carrying **bold** or U+2011 hyphens must still
+    find an ASCII article, and the other way round."""
+    s = _EMPHASIS.sub("", s)
+    s = s.translate(dict.fromkeys(map(ord, _HYPHEN_CHARS[1:]), "-"))
+    return s.translate({ord("\u201c"): '"', ord("\u201d"): '"',
+                        ord("\u2018"): "'", ord("\u2019"): "'"})
+
+
 def norm(s):
-    return " ".join(s.lower().split())
+    return " ".join(plain(s).lower().split())
 
 
 def parse_sheet(text):
@@ -118,8 +134,21 @@ def find_paragraph(paras, quote):
     return best_n if best >= 0.6 else None
 
 
+def _char_pattern(ch):
+    if ch in _HYPHEN_CHARS:
+        return f"[{re.escape(_HYPHEN_CHARS)}]"
+    if ch in _QUOTE_CLASS:
+        return _QUOTE_CLASS[ch]
+    return re.escape(ch)
+
+
 def _flexible_pattern(quote):
-    return r"\s+".join(re.escape(w) for w in quote.split())
+    """Whitespace-flexible, and tolerant of hyphen and quote-mark variants
+    and of emphasis markers in the quote (GH-454)."""
+    words = _EMPHASIS.sub("", quote).split()
+    mark = r"(?:\*{1,2}|_{1,2})?"
+    return r"\s+".join(mark + "".join(_char_pattern(c) for c in w) + mark
+                        for w in words)
 
 
 def normalize_punct(text):
