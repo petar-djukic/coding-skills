@@ -58,6 +58,9 @@ rules decide, and the rules are arguable because they are deterministic.
   another wrote "(cold review rejected its deletion)". Copying the
   instruction is not refused by itself: a verdict critic's Fix often holds
   the gloss to insert, and refusing the copy left undefined terms open. A
+  rationale written in the subject's own words passes this gate by
+  construction; cold review's class 6 (edit-talk) is where it is caught
+  (GH-468). A
   gated rejection keeps the original, recorded with its reason.
 - **Deletions apply directly** with mechanical punctuation
   normalization; omission is not authorship.

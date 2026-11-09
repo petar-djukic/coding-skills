@@ -297,7 +297,7 @@ Read ${SK}/cold-review/SKILL.md and its prompt template ${SK}/cold-review/refere
 - ship as-is: leave ${ART} as it is.
 - ship with reverts: run the skill's apply with your revert list against the baseline and write the result over ${ART}.
 - reject candidate: restore ${ART} to the baseline exactly (git show ${candidateSha}^:${ART}).
-High-value targets: numbers, citations, quotations, statement ids (R1.2, AC3), sentences left as fragments, and these protected spans:
+High-value targets: numbers, citations, quotations, statement ids (R1.2, AC3), sentences left as fragments, edit-talk (the template's class 6: a new sentence about the edit, the document, its rules or its parts instead of the subject), and these protected spans:
 ${list(pre.protected_spans)}
 ${COMMIT(`cold-review: <slug> (round ${round}, ${stage}: <verdict>)`)} For reverts, one body line per reverted paragraph and why; for a rejection, the reasons. The candidate stays in history at ${candidateSha}, so git show reads what was tried. Return the verdict, each revert as one line, reverted_paragraphs (the 1-based prose paragraph numbers you reverted, as cold_review.py numbers them; for a rejection, every paragraph the candidate changed), and HEAD after your commit. ${HYGIENE}`,
     { label, phase: 'Review', schema: COLD })
