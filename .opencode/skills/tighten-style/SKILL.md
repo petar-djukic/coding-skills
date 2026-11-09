@@ -54,6 +54,9 @@ python3 <tighten-style>/scripts/tighten.py --article <file> --check-only   # pla
 python3 <tighten-style>/scripts/tighten.py --article <file> --jobs 1        # sequential; default 4 (TIGHTEN_STYLE_JOBS), same draft (GH-433)
 # A verify-clean candidate that raises the paragraph's nominalizations or colons is not
 # spliced (record field register_refused, GH-458): tightening must not bury verbs.
+# The summary's `register:` line and the `.tighten.json` sidecar give nominalization
+# counts beside the per-1,000 rate, and which paragraphs were refused (GH-466): cutting
+# words raises the rate even when no nominalization is added, so quote both.
 ```
 
 1. **Run the checker** for the findings and the reading pass for the judgment

@@ -183,9 +183,16 @@ def main():
                     "owing to the limitation of memory on the smaller machines "
                     "that run the nightly benchmark suite.")
         o9 = os.path.join(tmp, "o9.md")
-        run_main(["--article", art, "--out", o9, "--retries", "0"], nominalizes)
+        out9 = run_main(["--article", art, "--out", o9, "--retries", "0"], nominalizes)
         kept9 = open(o9).read()
         assert WORDY in kept9 and "capability of expiration" not in kept9, kept9
+        # GH-466: the refusal is visible, in the sidecar and the summary,
+        # with counts beside the rate.
+        reg = json.load(open(o9 + ".tighten.json"))["register"]
+        assert reg["refused"] == [1] and "nominalization" in reg["refused_for"], reg
+        assert reg["before"]["nominalizations"] == reg["after"]["nominalizations"], reg
+        assert "refused for a register rise: 1" in out9, out9
+        assert "nominalizations" in out9 and "per 1,000 words" in out9, out9
 
         print("test_tighten: all assertions passed (no server)")
     finally:
